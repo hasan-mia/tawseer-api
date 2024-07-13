@@ -24,12 +24,10 @@ import { SmsService } from './sms.service';
         };
       },
     }),
-    MongooseModule.forFeature([
-      { name: 'User', schema: UserSchema },
-    ]),
+    MongooseModule.forFeature([{ name: 'User', schema: UserSchema }]),
   ],
   controllers: [AuthController, UserAuthController],
   providers: [AuthService, SmsService, JwtStrategy, RedisCacheService],
   exports: [JwtStrategy, PassportModule, AuthService],
 })
-export class AuthModule { }
+export class AuthModule {}

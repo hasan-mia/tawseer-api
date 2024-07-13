@@ -24,7 +24,7 @@ export class UserController {
   constructor(
     private userService: UserService,
     private cloudinaryService: CloudinaryService,
-  ) { }
+  ) {}
 
   // ======== Update User Profile ========
   @Put('update-profile')

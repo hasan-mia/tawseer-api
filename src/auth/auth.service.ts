@@ -22,7 +22,7 @@ export class AuthService {
     private readonly redisCacheService: RedisCacheService,
     @InjectModel(User.name)
     private userModel: Model<User>,
-  ) { }
+  ) {}
 
   // =================================//
   //          Authentiation           //

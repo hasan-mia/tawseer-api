@@ -45,7 +45,10 @@ export class User extends Document {
   @Prop({ enum: ['male', 'female', 'other'], required: true })
   gender: string;
 
-  @Prop({ enum: ['user', 'vendor', 'editor', 'admin', 'super_admin'], required: true })
+  @Prop({
+    enum: ['user', 'vendor', 'editor', 'admin', 'super_admin'],
+    required: true,
+  })
   role: string;
 
   @Prop({ default: null })
@@ -77,7 +80,7 @@ export class User extends Document {
 
   @Prop({ nullable: true })
   refresh_token: string;
-  
+
   // @Prop({ type: Types.ObjectId, ref: 'Profile' })
   // profile: Profile;
 }

@@ -20,7 +20,7 @@ import { RolesGuard } from './role.guard';
 //================================//
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) { }
+  constructor(private authService: AuthService) {}
   // amdin login
   @Post('admin/login')
   @HttpCode(HttpStatus.CREATED)
@@ -56,7 +56,7 @@ export class AuthController {
 //================================//
 @Controller('nest/auth/user')
 export class UserAuthController {
-  constructor(private authService: AuthService) { }
+  constructor(private authService: AuthService) {}
 
   @Post('signup')
   @HttpCode(HttpStatus.CREATED)

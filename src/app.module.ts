@@ -29,4 +29,4 @@ import { UserModule } from './user/user.module';
   providers: [AppService, RedisCacheService],
   exports: [RedisCacheService],
 })
-export class AppModule { }
+export class AppModule {}
