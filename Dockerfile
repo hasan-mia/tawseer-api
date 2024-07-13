@@ -1,23 +1,26 @@
-# Use official Node.js LTS (Long Term Support) image as the base image
-FROM node:lts-alpine AS builder
+# Use an official Node runtime as a parent image
+FROM node:18-alpine
 
-# Set working directory inside the container
+# Set the working directory
 WORKDIR /app
 
-# Copy package.json and package-lock.json (or yarn.lock) to container
+# Copy package.json and package-lock.json
 COPY package*.json ./
 
-# Install dependencies
+# Install Nest CLI globally
+RUN npm install -g @nestjs/cli
+
+# Install project dependencies
 RUN npm install
 
-# Copy the rest of the application code to the container
+# Copy the rest of the application code
 COPY . .
 
-# Build the Next.js application
-RUN npm run build
+# Build the Nest.js application
+RUN nest build
 
-# Expose the port Next.js is running on
-EXPOSE 5000
+# Expose the port the app runs on
+EXPOSE 3000
 
-# Command to run the application
-CMD ["npm", "start"]
+# Start the application
+CMD ["npm", "run", "start:prod"]
