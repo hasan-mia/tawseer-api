@@ -1,3 +1,4 @@
+/* eslint-disable prettier/prettier */
 import {
   ConflictException,
   Injectable,
@@ -15,6 +16,7 @@ import { User } from 'src/schemas/user.schema';
 import { OtpDto } from './dto/otp.dto';
 import { SigninDto } from './dto/signin.dto';
 import { SignUpDto, UserRole } from './dto/signup.dto';
+import { EmailService } from './email.service';
 import { SmsService } from './sms.service';
 
 @Injectable()
@@ -22,13 +24,14 @@ export class AuthService {
   constructor(
     private jwtService: JwtService,
     private smsService: SmsService,
+    private emailService: EmailService,
     private readonly redisCacheService: RedisCacheService,
     @InjectModel(User.name)
-    private userModel: Model<User>,
+    private userModel: Model<User>
     // eslint-disable-next-line prettier/prettier
   ) { }
 
-  // =============== Sign up =================
+  // =============== Sign up  with email & password=================
 
   async signUp(data: SignUpDto) {
     const { email, password, role } = data;
@@ -66,7 +69,7 @@ export class AuthService {
     }
   }
 
-  // =========Signin with email & password =============
+  // =========SignIn with email & password =============
   async signIn(data: SigninDto) {
     const { email, password } = data;
 
@@ -99,7 +102,7 @@ export class AuthService {
     }
   }
 
-  // =========Signin with email & password =============
+  // =========Forgot password with OTP=============
   async forgotPassword(data: OtpDto) {
     const { email } = data;
 
@@ -116,10 +119,20 @@ export class AuthService {
       user.otp = otp;
       await user.save();
 
+      const name = user.first_name + user.last_name || 'Sir..';
+
+      //Email data
+      const emailOptions = {
+        name: name,
+        email: user.email,
+        subject: 'Password Reset OTP',
+        message: `<p>Your OTP for password reset is: ${otp}</p>`,
+      };
+
+      await this.emailService.sendMail(emailOptions)
       const result = {
         success: true,
-        message: 'Sent opt to your email',
-        data: otp,
+        message: 'An OTP has been sent to your email.',
       };
 
       return result;
@@ -128,7 +141,7 @@ export class AuthService {
     }
   }
 
-  // =============== Verify otp =================
+  // =============== Reset password with otp =================
   async resetPassword(data: OtpDto): Promise<{ token: string }> {
     const { email, otp } = data;
     const user = await this.userModel.findOne({ email, otp });
@@ -151,7 +164,7 @@ export class AuthService {
     return result;
   }
 
-  // =========Ge My Info use =============
+  // =========Ge My Info =============
   async getMyInfo(id: string) {
     try {
       const cacheKey = `myInfo${id}`;

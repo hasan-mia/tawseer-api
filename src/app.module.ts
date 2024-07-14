@@ -1,15 +1,17 @@
-import {Module} from '@nestjs/common';
-import {ConfigModule} from '@nestjs/config';
-import {MongooseModule} from '@nestjs/mongoose';
-import {AppController} from './app.controller';
-import {AppService} from './app.service';
-import {AuthModule} from './auth/auth.module';
-import {CloudinaryModule} from './cloudinary/cloudinary.module';
-import {FileUploadModule} from './fileupload/fileupload.module';
-import {PaymentModule} from './payment/payment.module';
-import {RedisCacheService} from './rediscloud.service';
-import {SocketModule} from './socket/socket.module';
-import {UserModule} from './user/user.module';
+/* eslint-disable prettier/prettier */
+import { MailerModule } from '@nestjs-modules/mailer';
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { MongooseModule } from '@nestjs/mongoose';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
+import { AuthModule } from './auth/auth.module';
+import { CloudinaryModule } from './cloudinary/cloudinary.module';
+import { FileUploadModule } from './fileupload/fileupload.module';
+import { PaymentModule } from './payment/payment.module';
+import { RedisCacheService } from './rediscloud.service';
+import { SocketModule } from './socket/socket.module';
+import { UserModule } from './user/user.module';
 
 @Module({
   imports: [
@@ -24,9 +26,20 @@ import {UserModule} from './user/user.module';
     UserModule,
     PaymentModule,
     SocketModule,
+    MailerModule.forRoot({
+      transport: {
+        host: process.env.SMTP_HOST,
+        port: process.env.SMTP_PORT,
+        auth: {
+          user: process.env.SMTP_MAIL,
+          pass: process.env.SMTP_PASSWORD,
+        },
+      },
+    }),
   ],
   controllers: [AppController],
   providers: [AppService, RedisCacheService],
   exports: [RedisCacheService],
 })
-export class AppModule {}
+// eslint-disable-next-line prettier/prettier
+export class AppModule { }
