@@ -9,22 +9,22 @@ export class User extends Document {
   @Prop({ default: () => uuidv4() })
   uuid: string;
 
-  @Prop({ required: true })
+  @Prop()
   first_name: string;
 
-  @Prop({ required: true })
+  @Prop()
   last_name: string;
 
-  @Prop({ unique: true })
+  @Prop()
   mobile: string;
 
   @Prop({ unique: true })
   email: string;
 
-  @Prop({ nullable: true })
+  @Prop()
   username: string;
 
-  @Prop({ nullable: true })
+  @Prop()
   password: string;
 
   @Prop()
@@ -42,28 +42,33 @@ export class User extends Document {
   @Prop({ type: Date })
   birth_date: Date;
 
-  @Prop({ enum: ['male', 'female', 'other'], required: true })
+  @Prop({ enum: ['male', 'female', 'other'] })
   gender: string;
 
   @Prop({
     enum: ['user', 'vendor', 'editor', 'admin', 'super_admin'],
     required: true,
+    default: 'user',
   })
   role: string;
 
-  @Prop({ default: null })
+  @Prop()
   id_card_front_image: string;
 
-  @Prop({ default: null })
+  @Prop()
   id_card_back_image: string;
 
-  @Prop({ enum: ['pending', 'approved', 'rejected'], required: true })
+  @Prop({
+    enum: ['pending', 'approved', 'rejected'],
+    required: true,
+    default: 'pending',
+  })
   id_card_verification_status: string;
 
   @Prop({ default: false })
   is_verified: boolean;
 
-  @Prop({ nullable: true })
+  @Prop()
   fcmtoken: string;
 
   @Prop({ type: [String], default: [] })
@@ -78,11 +83,8 @@ export class User extends Document {
   @Prop({ type: Number })
   point: number;
 
-  @Prop({ nullable: true })
+  @Prop()
   refresh_token: string;
-
-  // @Prop({ type: Types.ObjectId, ref: 'Profile' })
-  // profile: Profile;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

@@ -23,22 +23,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     const user = await this.userModel
       .findById(id)
       .select({ __v: 0, password: 0 })
-      .populate({
-        path: 'profile',
-        select: '-__v',
-      })
-      .populate({
-        path: 'locations',
-        select: '-__v',
-      })
-      .populate({
-        path: 'topup',
-        select: '-__V',
-      })
-      .populate({
-        path: 'withdraw',
-        select: '-__V',
-      })
       .exec();
 
     if (!user) {

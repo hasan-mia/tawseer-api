@@ -3,8 +3,8 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
-import { Socket } from 'socket.io';
-import { SocketService } from './socket.service';
+import {Socket} from 'socket.io';
+import {SocketService} from './socket.service';
 
 @WebSocketGateway()
 export class SocketGateway implements OnGatewayConnection {

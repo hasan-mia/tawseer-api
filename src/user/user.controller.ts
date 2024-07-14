@@ -11,19 +11,19 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 
-import { FileInterceptor } from '@nestjs/platform-express';
-import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
-import { RolesGuard } from 'src/auth/role.guard';
-import { CloudinaryService } from 'src/cloudinary/cloudinary.service';
-import { UserProfileDto } from './dto/userprofile.dto';
-import { UserService } from './user.service';
+import {FileInterceptor} from '@nestjs/platform-express';
+import {JwtAuthGuard} from 'src/auth/jwt-auth.guard';
+import {RolesGuard} from 'src/auth/role.guard';
+import {CloudinaryService} from 'src/cloudinary/cloudinary.service';
+import {UserProfileDto} from './dto/userprofile.dto';
+import {UserService} from './user.service';
 
 @Controller('user')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class UserController {
   constructor(
     private userService: UserService,
-    private cloudinaryService: CloudinaryService,
+    private cloudinaryService: CloudinaryService
   ) {}
 
   // ======== Update User Profile ========
@@ -33,7 +33,7 @@ export class UserController {
   async updateProfile(
     @Body() data: UserProfileDto,
     @UploadedFile() avatar: Express.Multer.File,
-    @Request() req,
+    @Request() req
   ) {
     const user = req.user;
 
@@ -44,7 +44,7 @@ export class UserController {
         : null;
       return this.userService.updateProfile(user.id, uploadedImage, data);
     } catch (error) {
-      return { success: false, error: error.message };
+      return {success: false, error: error.message};
     }
   }
 

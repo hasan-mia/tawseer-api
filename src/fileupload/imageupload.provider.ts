@@ -1,14 +1,14 @@
-import { HttpException, HttpStatus } from '@nestjs/common';
-import { existsSync, mkdirSync } from 'fs';
-import { diskStorage } from 'multer';
-import { extname } from 'path';
-import { v4 as uuid } from 'uuid';
+import {HttpException, HttpStatus} from '@nestjs/common';
+import {existsSync, mkdirSync} from 'fs';
+import {diskStorage} from 'multer';
+import {extname} from 'path';
+import {v4 as uuid} from 'uuid';
 
 const uploadPath = './public/upload/images';
 
 // Ensure upload directory exists
 if (!existsSync(uploadPath)) {
-  mkdirSync(uploadPath, { recursive: true });
+  mkdirSync(uploadPath, {recursive: true});
 }
 
 // Multer configuration
@@ -32,9 +32,9 @@ export const ImageUploadOptions = {
       cb(
         new HttpException(
           `Unsupported file type ${extname(file.originalname)}`,
-          HttpStatus.BAD_REQUEST,
+          HttpStatus.BAD_REQUEST
         ),
-        false,
+        false
       );
     }
   },

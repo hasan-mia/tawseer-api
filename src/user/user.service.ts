@@ -15,7 +15,8 @@ export class UserService {
     private userModel: Model<User>,
 
     private readonly redisCacheService: RedisCacheService,
-  ) {}
+    // eslint-disable-next-line prettier/prettier
+  ) { }
 
   // ======== Update User Profile ========
   async updateProfile(id: string, avatar: any, data: UserProfileDto) {
@@ -23,11 +24,11 @@ export class UserService {
     // Find the user by ID
     const user = await this.userModel
       .findById(id)
-      .where('user_type')
-      .equals(0)
-      .where('role')
-      .equals('user')
-      .populate('profile')
+      // .where('user_type')
+      // .equals(0)
+      // .where('role')
+      // .equals('user')
+      // .populate('profile')
       .exec();
 
     if (!user) {
@@ -38,9 +39,6 @@ export class UserService {
       // Update user's email, mobile and password if provided
       if (email !== undefined && email !== null) {
         user.email = email;
-      }
-      if (mobile !== undefined && mobile !== null) {
-        user.mobile = mobile;
       }
       if (username !== undefined && username !== null) {
         user.username = username;
@@ -55,11 +53,11 @@ export class UserService {
       // Populate the updated user object with the profile information
       const updatedUser = await this.userModel
         .findById(id)
-        .select({ __v: 0, password: 0, otp: 0 })
-        .populate({
-          path: 'profile',
-          select: '-__v',
-        })
+        // .select({ __v: 0, password: 0, otp: 0 })
+        // .populate({
+        //   path: 'profile',
+        //   select: '-__v',
+        // })
         .exec();
 
       if (!updatedUser) {
@@ -92,8 +90,8 @@ export class UserService {
       }
       const users = await this.userModel
         .find({ user_type: 0 })
-        .select({ __v: 0, password: 0, otp: 0 })
-        .populate('profile')
+        // .select({ __v: 0, password: 0, otp: 0 })
+        // .populate('profile')
         .exec();
 
       // save data into redis
@@ -124,8 +122,8 @@ export class UserService {
 
       return await this.userModel
         .findById(id)
-        .select({ __v: 0, password: 0, otp: 0 })
-        .populate('profile')
+        // .select({ __v: 0, password: 0, otp: 0 })
+        // .populate('profile')
         .exec();
     } catch (error) {
       throw new Error(`Failed to retrieve users: ${error.message}`);
@@ -149,8 +147,8 @@ export class UserService {
 
       return await this.userModel
         .findById(id)
-        .select({ __v: 0, password: 0, otp: 0 })
-        .populate('profile')
+        // .select({ __v: 0, password: 0, otp: 0 })
+        // .populate('profile')
         .exec();
     } catch (error) {
       throw new Error(`Failed to retrieve users: ${error.message}`);
@@ -176,8 +174,8 @@ export class UserService {
 
       return await this.userModel
         .findById(id)
-        .select({ __v: 0, password: 0, otp: 0 })
-        .populate('profile')
+        // .select({ __v: 0, password: 0, otp: 0 })
+        // .populate('profile')
         .exec();
     } catch (error) {
       throw new Error(`Failed to retrieve users: ${error.message}`);

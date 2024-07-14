@@ -1,5 +1,7 @@
 import {
+  ConflictException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -7,11 +9,12 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/mongoose';
 import * as bcrypt from 'bcryptjs';
 import { Model } from 'mongoose';
+import { generateRandomFourDigitOtp } from 'src/helpers/otp.helper';
 import { RedisCacheService } from 'src/rediscloud.service';
 import { User } from 'src/schemas/user.schema';
 import { OtpDto } from './dto/otp.dto';
 import { SigninDto } from './dto/signin.dto';
-import { SignUpDto } from './dto/signup.dto';
+import { SignUpDto, UserRole } from './dto/signup.dto';
 import { SmsService } from './sms.service';
 
 @Injectable()
@@ -22,87 +25,126 @@ export class AuthService {
     private readonly redisCacheService: RedisCacheService,
     @InjectModel(User.name)
     private userModel: Model<User>,
-  ) {}
+    // eslint-disable-next-line prettier/prettier
+  ) { }
 
-  // =================================//
-  //          Authentiation           //
-  //==================================//
-
-  // =============== Varify otp =================
+  // =============== Sign up =================
 
   async signUp(data: SignUpDto) {
-    const { mobile } = data;
+    const { email, password, role } = data;
+    const exist = await this.userModel.findOne({ email });
 
-    // Check if user with the provided mobile number already exists
-    const existingUser = await this.userModel.findOne({ mobile });
+    if (exist) {
+      throw new ConflictException('Email address is already registered');
+    }
 
-    if (existingUser) {
-      // If user already exists, update their OTP
-      const otp = 1234;
-      await this.userModel.findOneAndUpdate({ mobile }, { otp });
-      // Send OTP via SMS
-      await this.smsService.sendOtpSms(mobile, otp);
-    } else {
-      // If user does not exist, create a new user
-      const otp = 1234;
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    try {
       const user = await this.userModel.create({
-        mobile,
-        role: 'admin',
-        user_type: 4,
-        otp,
+        email,
+        password: hashedPassword,
+        role: role ?? UserRole.User,
       });
 
       await user.save();
-      // Send OTP via SMS
-      await this.smsService.sendOtpSms(mobile, otp);
+
+      const data = { id: user._id, role: user.role };
+      const token = this.jwtService.sign(data);
+
+      const result = {
+        success: true,
+        message: 'Signup success',
+        data,
+        token: token,
+      };
+
+      return result;
+    } catch (error) {
+      throw new InternalServerErrorException(error.message);
     }
-
-    return { message: `Sending OTP to ${mobile} success` };
-  }
-
-  // =============== Varify otp =================
-  async verifyOtp(data: OtpDto): Promise<{ token: string }> {
-    const { mobile, otp } = data;
-    const user = await this.userModel.findOne({ mobile, otp });
-
-    if (!user) {
-      throw new UnauthorizedException('Invalid OTP');
-    }
-
-    // Clear the OTP after successful verification
-    await this.userModel.findOneAndUpdate({ mobile }, { otp: '' });
-
-    // Generate JWT token
-    const token = this.jwtService.sign({ id: user._id });
-
-    const result = {
-      message: 'Successfully Varify',
-      token: token,
-    };
-
-    return result;
   }
 
   // =========Signin with email & password =============
   async signIn(data: SigninDto) {
     const { email, password } = data;
 
-    const user = await this.userModel.findOne({ email });
+    try {
+      const user = await this.userModel.findOne({ email });
+
+      if (!user) {
+        throw new NotFoundException('User not found.');
+      }
+
+      const isPasswordMatched = await bcrypt.compare(password, user.password);
+
+      if (!isPasswordMatched) {
+        throw new NotFoundException('Password is wrong.');
+      }
+
+      const data = { id: user._id, role: user.role };
+      const token = this.jwtService.sign(data);
+
+      const result = {
+        success: true,
+        message: 'Login success',
+        data,
+        token: token,
+      };
+
+      return result;
+    } catch (error) {
+      throw new InternalServerErrorException(error.message);
+    }
+  }
+
+  // =========Signin with email & password =============
+  async forgotPassword(data: OtpDto) {
+    const { email } = data;
+
+    try {
+      const user = await this.userModel.findOne({ email });
+
+      if (!user) {
+        throw new NotFoundException('User not found.');
+      }
+
+      // generate otp
+      const otp = generateRandomFourDigitOtp();
+
+      user.otp = otp;
+      await user.save();
+
+      const result = {
+        success: true,
+        message: 'Sent opt to your email',
+        data: otp,
+      };
+
+      return result;
+    } catch (error) {
+      throw new InternalServerErrorException(error.message);
+    }
+  }
+
+  // =============== Verify otp =================
+  async resetPassword(data: OtpDto): Promise<{ token: string }> {
+    const { email, otp } = data;
+    const user = await this.userModel.findOne({ email, otp });
 
     if (!user) {
-      throw new NotFoundException('Wrong email');
+      throw new UnauthorizedException('Invalid OTP');
     }
 
-    const isPasswordMatched = await bcrypt.compare(password, user.password);
+    // Clear the OTP after successful verification
+    await this.userModel.findOneAndUpdate({ email }, { otp: '' });
 
-    if (!isPasswordMatched) {
-      throw new NotFoundException('Wrong password');
-    }
-
+    // Generate JWT token
     const token = this.jwtService.sign({ id: user._id });
 
     const result = {
-      message: 'Successfully login',
+      message: 'Successfully verified',
       token: token,
     };
 
@@ -117,28 +159,12 @@ export class AuthService {
       // Try to fetch all vehicles from cache
       const cachedMyInfo = await this.redisCacheService.get(cacheKey);
       if (cachedMyInfo) {
-        return cachedMyInfo;
+        return { success: true, data: cachedMyInfo };
       }
       // Check existing USER
       const user = await this.userModel
-        .findById(id)
-        .select({ __v: 0, password: 0, otp: 0 })
-        .populate({
-          path: 'profile',
-          select: '-__v',
-        })
-        .populate({
-          path: 'locations',
-          select: '-__v',
-        })
-        .populate({
-          path: 'topup',
-          select: '-__V',
-        })
-        .populate({
-          path: 'withdraw',
-          select: '-__V',
-        })
+        .findOne({ _id: id })
+        .select('-password')
         .exec();
 
       if (!user) {
@@ -148,46 +174,9 @@ export class AuthService {
       // Cache the fetched vehicles data
       await this.redisCacheService.set(cacheKey, user, 1800);
 
-      return user;
+      return { success: true, data: user };
     } catch (error) {
       throw new Error(`Failed to get vehicle: ${error.message}`);
     }
-  }
-
-  // =================================//
-  //           User Services          //
-  //==================================//
-  async userSignUp(data: SignUpDto) {
-    const { mobile } = data;
-
-    // Check if user with the provided mobile number already exists
-    const existingUser = await this.userModel.findOne({ mobile });
-
-    if (existingUser) {
-      // If user already exists, update their OTP
-      const otp = 1234;
-      await this.userModel.findOneAndUpdate({ mobile }, { otp });
-      // Send OTP via SMS
-      await this.smsService.sendOtpSms(mobile, otp);
-    } else {
-      // If user does not exist, create a new user
-      const otp = 1234;
-      const user = await this.userModel.create({ mobile, otp });
-
-      await user.save();
-      // Send OTP via SMS
-      await this.smsService.sendOtpSms(mobile, otp);
-    }
-
-    return { message: `Sending OTP to ${mobile} success` };
-  }
-
-  // =================================//
-  //          Common function         //
-  //==================================//
-
-  // Generate 4 digit OTP
-  async generateRandomFourDigitOtp() {
-    return await Math.floor(1000 + Math.random() * 9000);
   }
 }

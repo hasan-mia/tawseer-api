@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  Put,
   Request,
   UseGuards,
 } from '@nestjs/common';
@@ -20,20 +21,14 @@ import { RolesGuard } from './role.guard';
 //================================//
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
-  // amdin login
-  @Post('admin/login')
+  // eslint-disable-next-line prettier/prettier
+  constructor(private authService: AuthService) { }
+  @Post('signup')
   @HttpCode(HttpStatus.CREATED)
   userSignUp(@Body() data: SignUpDto) {
     return this.authService.signUp(data);
   }
 
-  // ======== varify otp ========
-  @Post('verify')
-  @HttpCode(HttpStatus.OK)
-  verifyOtp(@Body() otp: OtpDto) {
-    return this.authService.verifyOtp(otp);
-  }
   // ======== Sing with email and password ========
   @Post('signin')
   @HttpCode(HttpStatus.OK)
@@ -41,26 +36,26 @@ export class AuthController {
     return this.authService.signIn(data);
   }
 
+  // ======== Forgot password ========
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  forgotPassword(@Body() data: OtpDto) {
+    return this.authService.forgotPassword(data);
+  }
+
+  // ======== Reset otp ========
+  @Put('reset-password')
+  @HttpCode(HttpStatus.OK)
+  resetPassword(@Body() otp: OtpDto) {
+    return this.authService.resetPassword(otp);
+  }
+
   // ======== Get my Information ========
-  @Get('myinfo')
+  @Get('me')
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard, RolesGuard)
   getMyInfo(@Request() req) {
     const user = req.user;
     return this.authService.getMyInfo(user.id);
-  }
-}
-
-// ===============================//
-//          Route for user       //
-//================================//
-@Controller('nest/auth/user')
-export class UserAuthController {
-  constructor(private authService: AuthService) {}
-
-  @Post('signup')
-  @HttpCode(HttpStatus.CREATED)
-  userSignUp(@Body() data: SignUpDto) {
-    return this.authService.userSignUp(data);
   }
 }

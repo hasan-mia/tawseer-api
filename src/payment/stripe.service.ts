@@ -1,5 +1,5 @@
 import Stripe from 'stripe';
-import { StripePaymentDto } from './dto/stripepayment.dto';
+import {StripePaymentDto} from './dto/stripepayment.dto';
 
 export class StripeService {
   private readonly stripe: Stripe;

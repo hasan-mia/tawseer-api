@@ -1,9 +1,9 @@
-import { IsNotEmpty } from 'class-validator';
+import { IsOptional } from 'class-validator';
 
 export class OtpDto {
-  @IsNotEmpty()
-  readonly mobile: string;
+  @IsOptional()
+  readonly email?: string;
 
-  @IsNotEmpty()
-  readonly otp: number;
+  @IsOptional()
+  readonly otp?: number;
 }

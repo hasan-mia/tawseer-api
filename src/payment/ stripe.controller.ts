@@ -8,9 +8,9 @@ import {
   Request,
   UseGuards,
 } from '@nestjs/common';
-import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
-import { StripePaymentDto } from './dto/stripepayment.dto';
-import { StripeService } from './stripe.service';
+import {JwtAuthGuard} from 'src/auth/jwt-auth.guard';
+import {StripePaymentDto} from './dto/stripepayment.dto';
+import {StripeService} from './stripe.service';
 
 @Controller('car-wash/stripe')
 export class StripeController {

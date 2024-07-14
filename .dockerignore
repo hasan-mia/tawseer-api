@@ -4,3 +4,7 @@ npm-debug.log
 .env
 /build
 /.next
+pnpm-lock.yaml*
+.vscode
+.eslintrc.json
+.prettierrc

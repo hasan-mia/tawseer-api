@@ -1,6 +1,6 @@
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Inject, Injectable, Logger } from '@nestjs/common';
-import { Cache } from 'cache-manager';
+import {CACHE_MANAGER} from '@nestjs/cache-manager';
+import {Inject, Injectable, Logger} from '@nestjs/common';
+import {Cache} from 'cache-manager';
 
 @Injectable()
 export class RedisCacheService {
@@ -13,7 +13,7 @@ export class RedisCacheService {
       return await this.cacheService.get(key);
     } catch (error) {
       this.logger.error(
-        `Error getting value from Redis cache: ${error.message}`,
+        `Error getting value from Redis cache: ${error.message}`
       );
       throw error; // Optionally, handle or rethrow the error as needed
     }
@@ -33,7 +33,7 @@ export class RedisCacheService {
       await this.cacheService.del(key);
     } catch (error) {
       this.logger.error(
-        `Error deleting value from Redis cache: ${error.message}`,
+        `Error deleting value from Redis cache: ${error.message}`
       );
       throw error; // Optionally, handle or rethrow the error as needed
     }

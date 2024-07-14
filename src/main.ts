@@ -1,10 +1,10 @@
-import { ValidationPipe } from '@nestjs/common';
-import { NestFactory } from '@nestjs/core';
+import {ValidationPipe} from '@nestjs/common';
+import {NestFactory} from '@nestjs/core';
 import * as dotenv from 'dotenv';
 import * as express from 'express';
 import helmet from 'helmet';
 import * as path from 'path';
-import { AppModule } from './app.module';
+import {AppModule} from './app.module';
 
 dotenv.config();
 
