@@ -1,3 +1,4 @@
+/* eslint-disable prettier/prettier */
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { v4 as uuidv4 } from 'uuid';
@@ -53,10 +54,10 @@ export class User extends Document {
   role: string;
 
   @Prop()
-  id_card_front_image: string;
+  nid_front: string;
 
   @Prop()
-  id_card_back_image: string;
+  nid_back: string;
 
   @Prop({
     enum: ['pending', 'approved', 'rejected'],

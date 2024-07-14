@@ -11,6 +11,7 @@ import { FileUploadModule } from './fileupload/fileupload.module';
 import { PaymentModule } from './payment/payment.module';
 import { RedisCacheService } from './rediscloud.service';
 import { SocketModule } from './socket/socket.module';
+import { UploadModule } from './upload/upload.module';
 import { UserModule } from './user/user.module';
 
 @Module({
@@ -20,12 +21,6 @@ import { UserModule } from './user/user.module';
       isGlobal: true,
     }),
     MongooseModule.forRoot(process.env.DB_URI),
-    FileUploadModule,
-    CloudinaryModule,
-    AuthModule,
-    UserModule,
-    PaymentModule,
-    SocketModule,
     MailerModule.forRoot({
       transport: {
         host: process.env.SMTP_HOST,
@@ -36,6 +31,13 @@ import { UserModule } from './user/user.module';
         },
       },
     }),
+    SocketModule,
+    FileUploadModule,
+    CloudinaryModule,
+    AuthModule,
+    UserModule,
+    PaymentModule,
+    UploadModule,
   ],
   controllers: [AppController],
   providers: [AppService, RedisCacheService],
