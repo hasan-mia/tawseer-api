@@ -98,5 +98,21 @@ export class UploadController {
     }
   }
 
+  @Post('video-upload')
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(FileFieldsInterceptor([{ name: 'video', maxCount: 1 }]))
+  async uploadVideo(@UploadedFiles() files: { video?: Express.Multer.File[] }) {
+    try {
+      if (files.video?.length > 0) {
+        const result = await this.cloudinaryService.uploadVideo(files.video[0]);
+        // Extracting URLs for different resolutions
+        const urls = result.eager.map((transformation) => transformation.secure_url);
+        return { success: true, data: urls };
+      }
+      return { success: false, error: 'No video file uploaded' };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
 
 }
