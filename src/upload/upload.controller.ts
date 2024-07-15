@@ -98,6 +98,7 @@ export class UploadController {
     }
   }
 
+  // Upload video
   @Post('video-upload')
   @HttpCode(HttpStatus.OK)
   @UseInterceptors(FileFieldsInterceptor([{ name: 'video', maxCount: 1 }]))
@@ -108,6 +109,22 @@ export class UploadController {
         // Extracting URLs for different resolutions
         const urls = result.eager.map((transformation) => transformation.secure_url);
         return { success: true, data: urls };
+      }
+      return { success: false, error: 'No video file uploaded' };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  // HLS upload
+  @Post('hls-upload')
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(FileFieldsInterceptor([{ name: 'video', maxCount: 1 }]))
+  async convertAndUploadVideo(@UploadedFiles() files: { video?: Express.Multer.File[] }) {
+    try {
+      if (files.video?.length > 0) {
+        const result = await this.cloudinaryService.convertAndUploadVideo(files.video[0]);
+        return { success: true, url: result.secure_url };
       }
       return { success: false, error: 'No video file uploaded' };
     } catch (error) {
