@@ -11,6 +11,7 @@ import {
 
 import { FileFieldsInterceptor, FileInterceptor } from '@nestjs/platform-express';
 import { CloudinaryService } from 'src/cloudinary/cloudinary.service';
+import { restructureVideo } from 'src/helpers/restructureVideo.helper';
 
 @Controller('upload')
 export class UploadController {
@@ -72,7 +73,6 @@ export class UploadController {
   async uploadMultipleImages(
     @UploadedFiles()
     files: {
-      image?: Express.Multer.File[];
       nid_front?: Express.Multer.File[];
       nid_back?: Express.Multer.File[];
       date_of_birth?: Express.Multer.File[];
@@ -106,9 +106,9 @@ export class UploadController {
     try {
       if (files.video?.length > 0) {
         const result = await this.cloudinaryService.uploadVideo(files.video[0]);
-        // Extracting URLs for different resolutions
         const urls = result.eager.map((transformation) => transformation.secure_url);
-        return { success: true, data: urls };
+        const data = restructureVideo(urls)
+        return { success: true, data };
       }
       return { success: false, error: 'No video file uploaded' };
     } catch (error) {
@@ -117,19 +117,19 @@ export class UploadController {
   }
 
   // HLS upload
-  @Post('hls-upload')
-  @HttpCode(HttpStatus.OK)
-  @UseInterceptors(FileFieldsInterceptor([{ name: 'video', maxCount: 1 }]))
-  async convertAndUploadVideo(@UploadedFiles() files: { video?: Express.Multer.File[] }) {
-    try {
-      if (files.video?.length > 0) {
-        const result = await this.cloudinaryService.convertAndUploadVideo(files.video[0]);
-        return { success: true, url: result.secure_url };
-      }
-      return { success: false, error: 'No video file uploaded' };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  }
+  // @Post('hls-upload')
+  // @HttpCode(HttpStatus.OK)
+  // @UseInterceptors(FileFieldsInterceptor([{ name: 'video', maxCount: 1 }]))
+  // async convertAndUploadVideo(@UploadedFiles() files: { video?: Express.Multer.File[] }) {
+  //   try {
+  //     if (files.video?.length > 0) {
+  //       const result = await this.cloudinaryService.convertAndUploadVideo(files.video[0]);
+  //       return { success: true, url: result.secure_url };
+  //     }
+  //     return { success: false, error: 'No video file uploaded' };
+  //   } catch (error) {
+  //     return { success: false, error: error.message };
+  //   }
+  // }
 
 }

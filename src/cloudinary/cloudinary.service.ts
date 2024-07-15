@@ -30,10 +30,10 @@ export class CloudinaryService {
         {
           resource_type: 'video',
           eager: [
-            { format: 'm3u8', streaming_profile: 'hd' },
-            { format: 'm3u8', streaming_profile: 'sd' },
-            { format: 'm3u8', streaming_profile: 'full_hd' },
+            { width: 640, height: 360, crop: "scale" },
+            { width: 854, height: 480, crop: "scale" },
           ],
+          eager_async: true,
         },
         (error, result) => {
           if (error) return reject(error);
