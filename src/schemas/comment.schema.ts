@@ -6,30 +6,22 @@ import { v4 as uuidv4 } from 'uuid';
 @Schema({
   timestamps: true,
 })
-export class Contact extends Document {
+export class Comment extends Document {
   @Prop({ default: () => uuidv4() })
   uuid: string;
 
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   user: Types.ObjectId;
 
-  @Prop({ required: true })
-  address_one: string;
+  @Prop({ type: Types.ObjectId, ref: 'Post', required: true })
+  post: Types.ObjectId;
 
   @Prop()
-  address_two: string;
+  text: string;
 
-  @Prop({ required: true })
-  city: string;
+  @Prop()
+  image: string;
 
-  @Prop({ required: true })
-  post_code: string;
-
-  @Prop({ required: true })
-  state: string;
-
-  @Prop({ required: true })
-  country: string;
 }
 
-export const ContactSchema = SchemaFactory.createForClass(Contact);
+export const CommentSchema = SchemaFactory.createForClass(Comment);
