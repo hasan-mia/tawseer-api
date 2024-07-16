@@ -53,6 +53,13 @@ export class User extends Document {
   })
   role: string;
 
+  @Prop({
+    enum: ['free', 'starter', 'premium'],
+    required: true,
+    default: 'free',
+  })
+  subscribe_package: string;
+
   @Prop()
   nid_front: string;
 
