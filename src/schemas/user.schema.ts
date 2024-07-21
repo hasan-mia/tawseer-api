@@ -77,7 +77,7 @@ export class User extends Document {
   is_verified: boolean;
 
   @Prop()
-  fcmtoken: string;
+  fcmToken: string;
 
   @Prop({ type: [String], default: [] })
   location: string[];
@@ -93,6 +93,16 @@ export class User extends Document {
 
   @Prop()
   refresh_token: string;
+
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'Friend' }], default: [] })
+  friends: string[];
+
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'Follower' }], default: [] })
+  followers: string[];
+
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'Following' }], default: [] })
+  followings: string[];
+
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

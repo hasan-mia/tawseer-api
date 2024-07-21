@@ -22,7 +22,6 @@ import { RolesGuard } from './role.guard';
 //================================//
 @Controller('auth')
 export class AuthController {
-  // eslint-disable-next-line prettier/prettier
   constructor(private authService: AuthService) { }
   @Post('signup')
   @HttpCode(HttpStatus.CREATED)

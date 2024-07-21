@@ -7,53 +7,47 @@ import {
   HttpStatus,
   Put,
   Request,
-  UploadedFile,
-  UseGuards,
-  UseInterceptors
+  UseGuards
 } from '@nestjs/common';
 
-import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/role.guard';
-import { CloudinaryService } from 'src/cloudinary/cloudinary.service';
 import { UserProfileDto } from './dto/userprofile.dto';
 import { UserService } from './user.service';
 
 @Controller('user')
-@UseGuards(JwtAuthGuard, RolesGuard)
 export class UserController {
   constructor(
     private userService: UserService,
-    private cloudinaryService: CloudinaryService
   ) { }
 
   // ======== Update User Profile ========
   @Put('update-profile')
+  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.ACCEPTED)
-  @UseInterceptors(FileInterceptor('avatar'))
   async updateProfile(
-    @Body() data: UserProfileDto,
-    @UploadedFile() avatar: Express.Multer.File,
-    @Request() req
+    @Body() data: UserProfileDto, @Request() req
   ) {
     const user = req.user;
+    return this.userService.updateProfile(user.id, data);
 
-    try {
-      // If image is not provided in the request, set it to null
-      const uploadedImage = avatar
-        ? await this.cloudinaryService.uploadImage(avatar)
-        : null;
-      return this.userService.updateProfile(user.id, uploadedImage, data);
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
   }
 
   // ======== Get All User by admin ========
   @Get('all')
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @HttpCode(HttpStatus.OK)
-  getAllUser() {
-    return this.userService.alluser();
+  getAllUser(@Request() req) {
+    return this.userService.allUser(req);
+  }
+
+  // ======== Update user role by admin ========
+  @Put('all')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @HttpCode(HttpStatus.ACCEPTED)
+  updateUserRole(@Body() data: UserProfileDto, @Request() req) {
+    const user = req.user;
+    return this.userService.updateUserRole(user.id, data);
   }
 
 }

@@ -1,184 +1,186 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+/* eslint-disable prettier/prettier */
+import { Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import * as bcrypt from 'bcryptjs';
-import { response } from 'express';
 import { Model } from 'mongoose';
+import { ApiFeatures } from 'src/helpers/apiFeatures.helper';
 import { RedisCacheService } from '../rediscloud.service';
 import { User } from '../schemas/user.schema';
 import { UserProfileDto } from './dto/userprofile.dto';
-import { UserStatusDto } from './dto/userstatus.dto';
 
 @Injectable()
 export class UserService {
   constructor(
     @InjectModel(User.name)
     private userModel: Model<User>,
-
-    private readonly redisCacheService: RedisCacheService,
-    // eslint-disable-next-line prettier/prettier
+    private readonly redisCacheService: RedisCacheService
   ) { }
 
   // ======== Update User Profile ========
-  async updateProfile(id: string, avatar: any, data: UserProfileDto) {
-    const { first_name, last_name, email, mobile, password, username } = data;
-    // Find the user by ID
-    const user = await this.userModel
-      .findById(id)
-      // .where('user_type')
-      // .equals(0)
-      // .where('role')
-      // .equals('user')
-      // .populate('profile')
-      .exec();
-
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
+  async updateProfile(id: string, data: UserProfileDto) {
 
     try {
-      // Update user's email, mobile and password if provided
-      if (email !== undefined && email !== null) {
-        user.email = email;
-      }
-      if (username !== undefined && username !== null) {
-        user.username = username;
-      }
-      if (password !== undefined && password !== null) {
-        const salt = await bcrypt.genSalt(10);
-        const hanshPass = await bcrypt.hash(password, salt);
-        user.password = hanshPass;
-      }
-      await user.save();
 
-      // Populate the updated user object with the profile information
-      const updatedUser = await this.userModel
-        .findById(id)
-        // .select({ __v: 0, password: 0, otp: 0 })
-        // .populate({
-        //   path: 'profile',
-        //   select: '-__v',
-        // })
-        .exec();
+      const user = await this.userModel.findById(id).exec();
 
-      if (!updatedUser) {
-        throw new NotFoundException('Updated user not found');
+      if (!user) {
+        throw new NotFoundException('User not found');
       }
+
+      const updatedUserData = { ...user.toObject(), ...data };
+
+      const updatedUser = await this.userModel.findByIdAndUpdate(id, updatedUserData);
 
       // remove caching
       await this.redisCacheService.del('getAllUserByAdmin');
-      await this.redisCacheService.del('getAllRiderByAdmin');
       await this.redisCacheService.del(`myInfo${id}`);
 
-      return updatedUser;
+      const result = {
+        success: true,
+        message: 'Update successfully',
+        data: updatedUser,
+      };
+
+      return result;
     } catch (error) {
-      // Check if the error is a duplicate key error
-      if (error.code === 11000) {
-        return { error: 'Mobile number already exist' };
-      }
-      // Handle errors
-      throw new Error(`Failed to update profile: ${error.message}`);
+      throw new InternalServerErrorException(error.message);
     }
   }
 
   // ======== Get All User by admin ========
-  async alluser() {
+  async allUser(req: any) {
     try {
       const cacheKey = 'getAllUserByAdmin';
       const cacheData = await this.redisCacheService.get(cacheKey);
       if (cacheData) {
         return cacheData;
       }
-      const users = await this.userModel
-        .find({ user_type: 0 })
-        // .select({ __v: 0, password: 0, otp: 0 })
-        // .populate('profile')
-        .exec();
 
-      // save data into redis
-      await this.redisCacheService.set(cacheKey, response, 1800);
+      const { keyword } = req.query;
 
-      return users;
+      let perPage: number | undefined;
+
+      if (req.query && typeof req.query.limit === 'string') {
+        perPage = parseInt(req.query.limit, 10)
+      }
+
+      // Construct the search criteria
+      const searchCriteria = { name: String || null };
+      if (keyword) {
+        searchCriteria.name = keyword;
+      }
+
+      const count = await this.userModel.countDocuments(searchCriteria);
+
+      const apiFeature = new ApiFeatures(
+        this.userModel.find(searchCriteria).select('-__v -password').sort({ createdAt: -1 }),
+        req.query,
+      )
+        .search()
+        .filter();
+
+      if (perPage !== undefined) {
+        apiFeature.pagination(perPage)
+      }
+
+      const result = await apiFeature.query
+      const limit = result.length
+
+      const currentPage = req.query.page
+        ? parseInt(req.query.page as string, 10)
+        : 1
+
+      let totalPages: number | undefined;
+
+      if (perPage !== undefined) {
+        totalPages = Math.ceil(count / perPage)
+      }
+
+      let nextPage: number | null = null
+      let nextUrl: string | null = null
+
+      if (perPage !== undefined && currentPage < totalPages!) {
+        nextPage = currentPage + 1
+        nextUrl = `${req.originalUrl.split('?')[0]}?limit=${perPage}&page=${nextPage}`
+        if (keyword) {
+          nextUrl += `&keyword=${keyword}`;
+        }
+      }
+
+      const data = {
+        success: true,
+        data: result || [],
+        total: count,
+        perPage,
+        limit,
+        nextPage,
+        nextUrl,
+      }
+
+      await this.redisCacheService.set(cacheKey, data, 1800);
+
+      return data;
+
     } catch (error) {
-      throw new Error(`Failed to retrieve users: ${error.message}`);
+      throw new InternalServerErrorException(error.message);
     }
   }
 
-  // ========= Change user Varification status ======
-  async changeVarifyStatus(id: string, data: UserStatusDto) {
+  // ========= Change user role ======
+  async updateUserRole(id: string, data: UserProfileDto) {
     try {
       const exists = await this.userModel.findByIdAndUpdate(id).exec();
 
       if (!exists) {
         throw new NotFoundException('Use not found');
       }
-      await this.userModel
-        .updateOne({ _id: id }, { isVarified: data.isVarified })
+      const updatedData = await this.userModel
+        .updateOne({ _id: id }, { role: data.role })
         .exec();
 
       // remove caching
       await this.redisCacheService.del('getAllUserByAdmin');
-      await this.redisCacheService.del('getAllRiderByAdmin');
       await this.redisCacheService.del(`myInfo${id}`);
 
-      return await this.userModel
-        .findById(id)
-        // .select({ __v: 0, password: 0, otp: 0 })
-        // .populate('profile')
-        .exec();
+      const result = {
+        success: true,
+        message: 'Update successfully',
+        data: updatedData
+      }
+
+      return result;
+
     } catch (error) {
-      throw new Error(`Failed to retrieve users: ${error.message}`);
+      throw new InternalServerErrorException(error.message);
     }
   }
 
-  // ========= Change user Ban status ======
-  async changeBanStatus(id: string, data: UserStatusDto) {
+
+  // ========= Change user Verification status ======
+  async changeVerifyStatus(id: string, data: UserProfileDto) {
     try {
       const exists = await this.userModel.findByIdAndUpdate(id).exec();
 
       if (!exists) {
         throw new NotFoundException('Use not found');
       }
-      await this.userModel.updateOne({ _id: id }, { isBan: data.isBan }).exec();
+      const updatedData = await this.userModel
+        .updateOne({ _id: id }, { is_verified: data.is_verified })
+        .exec();
 
       // remove caching
       await this.redisCacheService.del('getAllUserByAdmin');
-      await this.redisCacheService.del('getAllRiderByAdmin');
       await this.redisCacheService.del(`myInfo${id}`);
 
-      return await this.userModel
-        .findById(id)
-        // .select({ __v: 0, password: 0, otp: 0 })
-        // .populate('profile')
-        .exec();
-    } catch (error) {
-      throw new Error(`Failed to retrieve users: ${error.message}`);
-    }
-  }
-
-  // ========= Change user Active status ======
-  async changeActiveStatus(id: string, data: UserStatusDto) {
-    try {
-      const exists = await this.userModel.findByIdAndUpdate(id).exec();
-
-      if (!exists) {
-        throw new NotFoundException('Use not found');
+      const result = {
+        success: true,
+        message: 'Update successfully',
+        data: updatedData
       }
-      await this.userModel
-        .updateOne({ _id: id }, { isActive: data.isActive })
-        .exec();
 
-      // remove caching
-      await this.redisCacheService.del('getAllUserByAdmin');
-      await this.redisCacheService.del('getAllRiderByAdmin');
-      await this.redisCacheService.del(`myInfo${id}`);
+      return result;
 
-      return await this.userModel
-        .findById(id)
-        // .select({ __v: 0, password: 0, otp: 0 })
-        // .populate('profile')
-        .exec();
     } catch (error) {
-      throw new Error(`Failed to retrieve users: ${error.message}`);
+      throw new InternalServerErrorException(error.message);
     }
   }
 }
