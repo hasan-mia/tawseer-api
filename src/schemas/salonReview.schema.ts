@@ -24,17 +24,13 @@ export class Review extends Document {
     required: true,
     default: 'service',
   })
-  type: string
+  type: string;
 
   @Prop({ type: Boolean, required: true })
-  rating: number
+  rating: number;
 
   @Prop({ type: String, required: true })
-  message: string
-
-  @Prop({ type: Types.ObjectId, ref: 'Coupon' })
-  coupon: Types.ObjectId;
-
+  message: string;
 }
 
 export const ReviewSchema = SchemaFactory.createForClass(Review);

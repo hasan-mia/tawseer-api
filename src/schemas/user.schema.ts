@@ -97,11 +97,14 @@ export class User extends Document {
   @Prop({ type: [{ type: Types.ObjectId, ref: 'Friend' }], default: [] })
   friends: string[];
 
-  @Prop({ type: [{ type: Types.ObjectId, ref: 'Follower' }], default: [] })
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'User' }], default: [] })
   followers: string[];
 
-  @Prop({ type: [{ type: Types.ObjectId, ref: 'Following' }], default: [] })
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'User' }], default: [] })
   followings: string[];
+
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'SalonFollow' }], default: [] })
+  salon_following: string[];
 
 }
 

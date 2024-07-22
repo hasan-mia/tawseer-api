@@ -16,7 +16,7 @@ import { ServiceService } from './service.service';
 
 @Controller('service')
 export class ServiceController {
-  constructor(private salonService: ServiceService) { }
+  constructor(private serviceService: ServiceService) { }
 
   // ======== Create service ========
   @Put('create')
@@ -24,7 +24,7 @@ export class ServiceController {
   @HttpCode(HttpStatus.CREATED)
   async createService(@Body() data: ServiceDto, @Request() req) {
     const user = req.user;
-    return this.salonService.createService(user.id, data);
+    return this.serviceService.createService(user.id, data);
   }
 
   // ======== Update service ========
@@ -34,14 +34,14 @@ export class ServiceController {
   async updateService(@Body() data: ServiceDto, @Request() req) {
     const user = req.user;
     const postId = req.params.id;
-    return this.salonService.updateService(user.id, postId, data);
+    return this.serviceService.updateService(user.id, postId, data);
   }
 
   // ======== Get all service ========
   @Get('all')
   @HttpCode(HttpStatus.OK)
   async getAllService(@Request() req) {
-    return this.salonService.getAllService(req);
+    return this.serviceService.getAllService(req);
   }
 
   // ======== Get service details by id ========
@@ -49,13 +49,13 @@ export class ServiceController {
   @HttpCode(HttpStatus.OK)
   async getServiceDetails(@Request() req) {
     const id = req.params.id;
-    return this.salonService.getServiceDetails(id);
+    return this.serviceService.getServiceDetails(id);
   }
 
   // ======== Get service details by id ========
   @Get('all/:id')
   @HttpCode(HttpStatus.OK)
   async getAllServiceBySalonId(@Request() req) {
-    return this.salonService.getAllServiceBySalonId(req);
+    return this.serviceService.getAllServiceBySalonId(req);
   }
 }
