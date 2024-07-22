@@ -18,15 +18,13 @@ export class FriendService {
   ) { }
 
   // ======== Send friend request ========
-  async sendFriendRequest(id: string, data: FriendDto, req: any) {
-
+  async sendFriendRequest(fromUser: string, data: FriendDto) {
+    const { toUser } = data
     try {
 
-      const fromUser = req.user.id
-      const { toUser } = req.body
 
       const existingRequest = await this.friendModel.findOne({
-        fromUser,
+        user: fromUser,
         toUser,
         status: 'pending',
       })
@@ -51,7 +49,7 @@ export class FriendService {
       }
 
       // send friend request
-      const friendRequest = await this.friendModel.create({ fromUser, toUser })
+      const friendRequest = await this.friendModel.create({ user: fromUser, friend: toUser })
 
       if (!friendRequest) {
         throw new NotFoundException('Failed to send friend request');
@@ -84,12 +82,10 @@ export class FriendService {
   }
 
   // ======== Accept friend request ========
-  async acceptFriendRequest(id: string, data: FriendDto, req: any) {
+  async acceptFriendRequest(toUser: string, data: FriendDto) {
+    const { friendId } = data
 
     try {
-
-      const { friendId } = req.body
-
       const existRequest = await this.friendModel.findOne({
         fromUser: friendId,
         status: 'pending',
@@ -108,11 +104,9 @@ export class FriendService {
       if (!friendRequest) {
         throw new NotFoundException('Failed to accept friend request');
       }
-      // Get the user who is accepting
-      const toUser = req.user.id
 
       // Get the sender of the friend
-      const fromUser = friendRequest.fromUser
+      const fromUser = friendRequest.user
 
       // Update the 'friends' field
       await this.userModel.findByIdAndUpdate(
@@ -142,11 +136,11 @@ export class FriendService {
   }
 
   // ======== Cancel friend request ========
-  async cancelFriendRequest(id: string, data: FriendDto, req: any) {
+  async cancelFriendRequest(id: string, data: FriendDto) {
 
+    const { friendId } = data
     try {
 
-      const { friendId } = req.body
 
       // Find friend requests where fromUser or toUser matches friendId
       const friendRequests = await this.friendModel.find({
@@ -219,9 +213,9 @@ export class FriendService {
 
     try {
       const pendingRequests = await this.friendModel.find({
-        toUser: id,
+        friend: id,
         status: 'pending',
-      }).populate('fromUser')
+      }).populate('user')
 
       const result = {
         success: true,
@@ -240,9 +234,9 @@ export class FriendService {
 
     try {
       const pendingRequests = await this.friendModel.find({
-        fromUser: id,
+        user: id,
         status: 'pending',
-      }).populate('toUser')
+      }).populate('friend')
 
       const result = {
         success: true,

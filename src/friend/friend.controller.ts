@@ -4,7 +4,7 @@ import {
   Controller,
   HttpCode,
   HttpStatus,
-  Put,
+  Post,
   Request,
   UseGuards
 } from '@nestjs/common';
@@ -20,17 +20,87 @@ export class FriendController {
   ) { }
 
   // ======== Send friend request ========
-  @Put('send-request')
+  @Post('send-request')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.ACCEPTED)
   async sendFriendRequest(
     @Body() data: FriendDto, @Request() req
   ) {
     const user = req.user;
-    return this.friendService.sendFriendRequest(user.id, data, req);
+    return this.friendService.sendFriendRequest(user.id, data);
 
   }
 
+  // ======== Accept friend request ========
+  @Post('accept-request')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.ACCEPTED)
+  async acceptFriendRequest(
+    @Body() data: FriendDto, @Request() req,
+  ) {
+    const user = req.user;
+    return this.friendService.acceptFriendRequest(user.id, data);
 
+  }
+
+  // ======== Cancel friend request ========
+  @Post('cancel-request')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.ACCEPTED)
+  async cancelFriendRequest(
+    @Body() data: FriendDto, @Request() req,
+  ) {
+    const user = req.user;
+    return this.friendService.cancelFriendRequest(user.id, data);
+
+  }
+
+  // ======== Pending friend request ========
+  @Post('pending-request')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.ACCEPTED)
+  async pendingFriendRequest(
+    @Request() req,
+  ) {
+    const user = req.user;
+    return this.friendService.getPendingFriendRequests(user.id);
+
+  }
+
+  // ======== Sending friend request ========
+  @Post('sending-request')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.ACCEPTED)
+  async sendingFriendRequest(
+    @Request() req,
+  ) {
+    const user = req.user;
+    return this.friendService.getSendingFriendRequests(user.id);
+
+  }
+
+  // ======== My friend list ========
+  @Post('my-friend-list')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.ACCEPTED)
+  async getMyFriendList(
+    @Request() req,
+  ) {
+    const user = req.user;
+    return this.friendService.getMyFriendList(user.id);
+
+  }
+
+  // ======== User friend list by ID ========
+  @Post('user-friend-list')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.ACCEPTED)
+  async getFriendListByID(
+    @Request() req,
+  ) {
+    const user = req.user;
+    return this.friendService.getFriendListByID(user.id);
+
+  }
 
 }

@@ -11,10 +11,10 @@ export class Friend extends Document {
   uuid: string;
 
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
-  fromUser: Types.ObjectId;
+  user: Types.ObjectId;
 
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
-  toUser: Types.ObjectId;
+  friend: Types.ObjectId;
 
   @Prop({ enum: ['pending', 'accepted', 'rejected'] })
   status: string;
