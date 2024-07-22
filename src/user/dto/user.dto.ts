@@ -9,7 +9,7 @@ import {
   IsStrongPassword,
 } from 'class-validator';
 
-export class UserProfileDto {
+export class UserDto {
   @IsString()
   @IsOptional()
   readonly first_name?: string;

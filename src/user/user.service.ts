@@ -5,7 +5,7 @@ import { Model } from 'mongoose';
 import { ApiFeatures } from 'src/helpers/apiFeatures.helper';
 import { RedisCacheService } from '../rediscloud.service';
 import { User } from '../schemas/user.schema';
-import { UserProfileDto } from './dto/userprofile.dto';
+import { UserDto } from './dto/user.dto';
 
 @Injectable()
 export class UserService {
@@ -16,7 +16,7 @@ export class UserService {
   ) { }
 
   // ======== Update User Profile ========
-  async updateProfile(id: string, data: UserProfileDto) {
+  async updateProfile(id: string, data: UserDto) {
 
     try {
 
@@ -48,7 +48,7 @@ export class UserService {
   }
 
   // ========= Change user role ======
-  async updateUserRole(id: string, data: UserProfileDto) {
+  async updateUserRole(id: string, data: UserDto) {
     try {
       const user = await this.userModel.findByIdAndUpdate(id).exec();
 
@@ -79,7 +79,7 @@ export class UserService {
 
 
   // ========= Change user Verification status ======
-  async changeVerifyStatus(id: string, data: UserProfileDto) {
+  async changeVerifyStatus(id: string, data: UserDto) {
     try {
       const user = await this.userModel.findByIdAndUpdate(id).exec();
 

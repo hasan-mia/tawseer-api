@@ -13,6 +13,7 @@ import { PaymentModule } from './payment/payment.module';
 import { PostModule } from './post/post.module';
 import { RedisCacheService } from './rediscloud.service';
 import { SalonModule } from './salon/salon.module';
+import { ServiceModule } from './salonService/service.module';
 import { SocketModule } from './socket/socket.module';
 import { UploadModule } from './upload/upload.module';
 import { UserModule } from './user/user.module';
@@ -44,10 +45,10 @@ import { UserModule } from './user/user.module';
     FriendModule,
     SalonModule,
     PostModule,
+    ServiceModule,
   ],
   controllers: [AppController],
   providers: [AppService, RedisCacheService],
   exports: [RedisCacheService],
 })
-// eslint-disable-next-line prettier/prettier
 export class AppModule { }

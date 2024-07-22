@@ -13,7 +13,7 @@ import {
 
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/role.guard';
-import { UserProfileDto } from './dto/userprofile.dto';
+import { UserDto } from './dto/user.dto';
 import { UserService } from './user.service';
 
 @Controller('user')
@@ -27,7 +27,7 @@ export class UserController {
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.ACCEPTED)
   async updateProfile(
-    @Body() data: UserProfileDto, @Request() req
+    @Body() data: UserDto, @Request() req
   ) {
     const user = req.user;
     return this.userService.updateProfile(user.id, data);
@@ -38,7 +38,7 @@ export class UserController {
   @Put('role/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @HttpCode(HttpStatus.ACCEPTED)
-  async updateUserRole(@Param() id: string, @Body() data: UserProfileDto) {
+  async updateUserRole(@Param() id: string, @Body() data: UserDto) {
     return this.userService.updateUserRole(id, data);
   }
 

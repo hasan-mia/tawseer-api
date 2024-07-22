@@ -60,5 +60,12 @@ export class PostController {
     return this.salonService.getPostDetails(id);
   }
 
+  // ======== Get all post by user id ========
+  @Get('all/:id')
+  @HttpCode(HttpStatus.OK)
+  async getAllPostByUserID(@Request() req) {
+    return this.salonService.getAllPostByUserID(req);
+  }
+
 
 }
