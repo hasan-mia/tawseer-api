@@ -16,7 +16,7 @@ export class Reply extends Document {
   @Prop({ type: Types.ObjectId, ref: 'Post', required: true })
   post: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'Post', required: true })
+  @Prop({ type: Types.ObjectId, ref: 'Comment', required: true })
   comment: Types.ObjectId;
 
   @Prop()

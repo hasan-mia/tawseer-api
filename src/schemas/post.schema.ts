@@ -30,6 +30,9 @@ export class Post extends Document {
 
   @Prop({ type: Number, default: 0 })
   shares: number;
+
+  @Prop({ type: Boolean, default: false })
+  is_deleted: boolean;
 }
 
 export const PostSchema = SchemaFactory.createForClass(Post);

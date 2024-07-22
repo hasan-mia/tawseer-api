@@ -13,6 +13,7 @@ import { PaymentModule } from './payment/payment.module';
 import { PostModule } from './post/post.module';
 import { RedisCacheService } from './rediscloud.service';
 import { SalonModule } from './salon/salon.module';
+import { AppointmentModule } from './salonAppointment/appointment.module';
 import { ReviewModule } from './salonReview/review.module';
 import { ServiceModule } from './salonService/service.module';
 import { SocketModule } from './socket/socket.module';
@@ -47,7 +48,8 @@ import { UserModule } from './user/user.module';
     SalonModule,
     PostModule,
     ServiceModule,
-    ReviewModule
+    ReviewModule,
+    AppointmentModule
   ],
   controllers: [AppController],
   providers: [AppService, RedisCacheService],

@@ -22,6 +22,9 @@ export class Comment extends Document {
   @Prop()
   image: string;
 
+  @Prop({ type: Boolean, default: false })
+  is_deleted: boolean;
+
 }
 
 export const CommentSchema = SchemaFactory.createForClass(Comment);

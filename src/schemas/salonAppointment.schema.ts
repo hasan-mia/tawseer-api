@@ -13,6 +13,13 @@ export class Appointment extends Document {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   user: Types.ObjectId;
 
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
+  vendor: Types.ObjectId;
+
+
+  @Prop({ type: Types.ObjectId, ref: 'Salon', required: true })
+  salon: Types.ObjectId;
+
   @Prop({ type: Types.ObjectId, ref: 'Service', required: true })
   service: Types.ObjectId;
 
@@ -26,14 +33,11 @@ export class Appointment extends Document {
   })
   status: string
 
-  @Prop()
+  @Prop({ type: Number, required: true })
   price: number
 
-  @Prop()
+  @Prop({ type: Number, required: false })
   discount: number
-
-  @Prop({ type: Types.ObjectId, ref: 'Coupon' })
-  coupon: Types.ObjectId;
 
 }
 

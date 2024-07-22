@@ -106,6 +106,12 @@ export class User extends Document {
   @Prop({ type: [{ type: Types.ObjectId, ref: 'SalonFollow' }], default: [] })
   salon_following: string[];
 
+  @Prop({ type: Boolean, default: false })
+  is_deleted: boolean;
+
+  @Prop({ type: Boolean, default: false })
+  is_disabled: boolean;
+
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

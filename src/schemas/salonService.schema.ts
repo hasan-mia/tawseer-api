@@ -43,6 +43,9 @@ export class Service extends Document {
   @Prop({ type: Types.ObjectId, ref: 'Coupon' })
   coupon: Types.ObjectId;
 
+  @Prop({ type: Boolean, default: false })
+  is_deleted: boolean;
+
 }
 
 export const ServiceSchema = SchemaFactory.createForClass(Service);

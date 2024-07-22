@@ -30,6 +30,9 @@ export class Contact extends Document {
 
   @Prop({ required: true })
   country: string;
+
+  @Prop({ type: Boolean, default: false })
+  is_deleted: boolean;
 }
 
 export const ContactSchema = SchemaFactory.createForClass(Contact);

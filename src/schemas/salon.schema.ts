@@ -40,6 +40,9 @@ export class Salon extends Document {
   @Prop({ type: [String], default: [] })
   location: string[];
 
+  @Prop({ type: Boolean, default: false })
+  is_deleted: boolean;
+
 }
 
 export const SalonSchema = SchemaFactory.createForClass(Salon);
