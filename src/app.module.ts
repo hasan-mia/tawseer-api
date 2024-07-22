@@ -11,6 +11,7 @@ import { FileUploadModule } from './fileupload/fileupload.module';
 import { FriendModule } from './friend/friend.module';
 import { PaymentModule } from './payment/payment.module';
 import { RedisCacheService } from './rediscloud.service';
+import { SalonModule } from './salon/salon.module';
 import { SocketModule } from './socket/socket.module';
 import { UploadModule } from './upload/upload.module';
 import { UserModule } from './user/user.module';
@@ -40,6 +41,7 @@ import { UserModule } from './user/user.module';
     PaymentModule,
     UploadModule,
     FriendModule,
+    SalonModule,
   ],
   controllers: [AppController],
   providers: [AppService, RedisCacheService],

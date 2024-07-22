@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Param,
   Put,
   Request,
   UseGuards
@@ -22,7 +23,7 @@ export class UserController {
   ) { }
 
   // ======== Update User Profile ========
-  @Put('update-profile')
+  @Put('update')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.ACCEPTED)
   async updateProfile(
@@ -33,21 +34,25 @@ export class UserController {
 
   }
 
+  // ======== Update user role by admin ========
+  @Put('role/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @HttpCode(HttpStatus.ACCEPTED)
+  updateUserRole(@Param() id: string, @Body() data: UserProfileDto) {
+    return this.userService.updateUserRole(id, data);
+  }
+
   // ======== Get All User by admin ========
   @Get('all')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @HttpCode(HttpStatus.OK)
-  getAllUser(@Request() req) {
+  getUserInfo(@Request() req) {
     return this.userService.allUser(req);
   }
 
-  // ======== Update user role by admin ========
-  @Put('all')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @HttpCode(HttpStatus.ACCEPTED)
-  updateUserRole(@Body() data: UserProfileDto, @Request() req) {
-    const user = req.user;
-    return this.userService.updateUserRole(user.id, data);
+  // ======== Get user info by ID ========
+  @Get(':id')
+  @HttpCode(HttpStatus.OK)
+  getAllUser(@Param() id: string) {
+    return this.userService.allUser(id);
   }
-
 }

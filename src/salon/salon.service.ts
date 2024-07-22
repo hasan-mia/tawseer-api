@@ -3,42 +3,50 @@ import { Injectable, InternalServerErrorException, NotFoundException } from '@ne
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { ApiFeatures } from 'src/helpers/apiFeatures.helper';
+import { Salon } from 'src/schemas/salon.schema';
 import { RedisCacheService } from '../rediscloud.service';
 import { User } from '../schemas/user.schema';
-import { UserProfileDto } from './dto/userprofile.dto';
+import { SalonDto } from './dto/salon.dto';
 
 @Injectable()
-export class UserService {
+export class SalonService {
   constructor(
     @InjectModel(User.name)
     private userModel: Model<User>,
+    @InjectModel(Salon.name)
+    private salonModel: Model<Salon>,
     private readonly redisCacheService: RedisCacheService
   ) { }
 
-  // ======== Update User Profile ========
-  async updateProfile(id: string, data: UserProfileDto) {
+  // ======== Create new Salon ========
+  async createSalon(id: string, data: SalonDto) {
 
     try {
-
       const user = await this.userModel.findById(id).exec();
 
       if (!user) {
         throw new NotFoundException('User not found');
       }
 
-      const updatedUserData = { ...user.toObject(), ...data };
+      if (user.role !== 'vendor') {
+        throw new NotFoundException('Only vendor can create salon');
+      }
 
-      const updatedUser = await this.userModel.findByIdAndUpdate(id, updatedUserData);
+      const exist = await this.salonModel.findOne({ vendor: id }).exec();
+
+      if (exist) {
+        throw new NotFoundException('Already have a salon');
+      }
+
+      const salon = await this.salonModel.create(data);
 
       // remove caching
-      await this.redisCacheService.del('getAllUser');
-      await this.redisCacheService.del(`myInfo${user._id}`);
-      await this.redisCacheService.del(`userInfo${user._id}`);
+      await this.redisCacheService.del('getAllSalon');
 
       const result = {
         success: true,
-        message: 'Update successfully',
-        data: updatedUser,
+        message: 'Crate successfully',
+        data: salon,
       };
 
       return result;
@@ -47,72 +55,46 @@ export class UserService {
     }
   }
 
-  // ========= Change user role ======
-  async updateUserRole(id: string, data: UserProfileDto) {
+  // ======== Update salon Profile ========
+  async updateSalon(id: string, data: SalonDto) {
+
     try {
-      const user = await this.userModel.findByIdAndUpdate(id).exec();
+      const user = await this.userModel.findById(id).exec();
 
       if (!user) {
-        throw new NotFoundException('Use not found');
+        throw new NotFoundException('User not found');
       }
-      const updatedData = await this.userModel
-        .updateOne({ _id: id }, { role: data.role })
-        .exec();
+
+      const salon = await this.salonModel.findOne({ vendor: id }).exec();
+
+      if (!salon) {
+        throw new NotFoundException('Salon not found');
+      }
+
+      const updatedSalonData = { ...salon.toObject(), ...data };
+
+      const updatedSalon = await this.salonModel.findByIdAndUpdate(salon._id, updatedSalonData);
 
       // remove caching
-      await this.redisCacheService.del('getAllUser');
-      await this.redisCacheService.del(`myInfo${user._id}`);
-      await this.redisCacheService.del(`userInfo${user._id}`);
+      await this.redisCacheService.del('getAllSalon');
+      await this.redisCacheService.del(`salonInfo${salon._id}`);
 
       const result = {
         success: true,
         message: 'Update successfully',
-        data: updatedData
-      }
+        data: updatedSalon,
+      };
 
       return result;
-
     } catch (error) {
       throw new InternalServerErrorException(error.message);
     }
   }
 
-
-  // ========= Change user Verification status ======
-  async changeVerifyStatus(id: string, data: UserProfileDto) {
+  // ======== Get All Salon ========
+  async getAllSalon(req: any) {
     try {
-      const user = await this.userModel.findByIdAndUpdate(id).exec();
-
-      if (!user) {
-        throw new NotFoundException('Use not found');
-      }
-      const updatedData = await this.userModel
-        .updateOne({ _id: id }, { is_verified: data.is_verified })
-        .exec();
-
-      // remove caching
-      await this.redisCacheService.del('getAllUser');
-      await this.redisCacheService.del(`myInfo${user._id}`);
-      await this.redisCacheService.del(`userInfo${user._id}`);
-
-
-      const result = {
-        success: true,
-        message: 'Update successfully',
-        data: updatedData
-      }
-
-      return result;
-
-    } catch (error) {
-      throw new InternalServerErrorException(error.message);
-    }
-  }
-
-  // ======== Get All User by admin ========
-  async allUser(req: any) {
-    try {
-      const cacheKey = 'getAllUser';
+      const cacheKey = 'getAllSalon';
       const cacheData = await this.redisCacheService.get(cacheKey);
       if (cacheData) {
         return cacheData;
@@ -132,10 +114,10 @@ export class UserService {
         searchCriteria.name = keyword;
       }
 
-      const count = await this.userModel.countDocuments(searchCriteria);
+      const count = await this.salonModel.countDocuments(searchCriteria);
 
       const apiFeature = new ApiFeatures(
-        this.userModel.find(searchCriteria).select('-__v -password').sort({ createdAt: -1 }),
+        this.salonModel.find(searchCriteria).select('-__v').sort({ createdAt: -1 }),
         req.query,
       )
         .search()
@@ -188,18 +170,18 @@ export class UserService {
     }
   }
 
-  // ======== Get user info by ID ========
+  // ======== Get single salon info by ID ========
+  async getSalonInfo(id: string) {
 
-  async getUserInfo(id: string) {
     try {
-      const cacheKey = `userInfo${id}`;
+      const cacheKey = `salonInfo${id}`;
       const cacheData = await this.redisCacheService.get(cacheKey);
 
       if (cacheData) {
         return cacheData;
       }
 
-      const data = await this.userModel.findById(id).exec();
+      const data = await this.salonModel.findById(id).exec();
 
       if (!data) {
         throw new NotFoundException('Salon not found');
@@ -210,7 +192,7 @@ export class UserService {
 
       const result = {
         success: true,
-        message: 'User found successfully',
+        message: 'Salon found successfully',
         data: data,
       };
 

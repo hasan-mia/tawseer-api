@@ -16,20 +16,26 @@ export class Salon extends Document {
   @Prop({ required: true })
   name: string
 
-  @Prop()
+  @Prop({ required: true })
+  bio: string
+
+  @Prop({ required: true })
   logo: string
 
-  @Prop()
+  @Prop({ required: true })
   cover: string
 
-  @Prop()
+  @Prop({ required: true })
   address: string
 
-  @Prop()
-  phone: string
+  @Prop({ required: true })
+  mobile: string
 
   @Prop()
   tin_certificate: string
+
+  @Prop({ type: Boolean, default: false })
+  is_verified: string
 
   @Prop({ type: [String], default: [] })
   location: string[];
