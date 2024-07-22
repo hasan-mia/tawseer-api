@@ -5,7 +5,6 @@ import {
   Get,
   HttpCode,
   HttpStatus,
-  Param,
   Put,
   Request,
   UseGuards
@@ -24,7 +23,7 @@ export class SalonController {
   // ======== Update Salon ========
   @Put('create')
   @UseGuards(JwtAuthGuard)
-  @HttpCode(HttpStatus.ACCEPTED)
+  @HttpCode(HttpStatus.CREATED)
   async createSalon(
     @Body() data: SalonDto, @Request() req
   ) {
@@ -34,28 +33,30 @@ export class SalonController {
   }
 
   // ======== Update Salon ========
-  @Put('update')
+  @Put('update/:id')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.ACCEPTED)
   async updateSalon(
     @Body() data: SalonDto, @Request() req
   ) {
     const user = req.user;
-    return this.salonService.updateSalon(user.id, data);
+    const salonId = req.params.id;
+    return this.salonService.updateSalon(user.id, salonId, data);
 
   }
 
   // ======== Get all salon ========
   @Get('all')
   @HttpCode(HttpStatus.OK)
-  getAllSalon(@Request() req) {
+  async getAllSalon(@Request() req) {
     return this.salonService.getAllSalon(req);
   }
 
   // ======== Get salon info by id ========
   @Get(':id')
   @HttpCode(HttpStatus.OK)
-  getSalonInfo(@Param() id) {
+  async getSalonInfo(@Request() req) {
+    const id = req.params.id;
     return this.salonService.getSalonInfo(id);
   }
 

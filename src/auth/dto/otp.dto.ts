@@ -1,3 +1,4 @@
+/* eslint-disable prettier/prettier */
 import { IsOptional } from 'class-validator';
 
 export class OtpDto {

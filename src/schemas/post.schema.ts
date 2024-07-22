@@ -13,16 +13,22 @@ export class Post extends Document {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   user: Types.ObjectId;
 
-  @Prop({ enum: ['text', 'image', 'video'], default: 'text' })
+  @Prop({ enum: ['text', 'photo', 'video'], default: 'text' })
   type: string;
 
-  @Prop()
+  @Prop({ type: String, required: false })
   text: string;
 
-  @Prop()
+  @Prop({ type: Types.ObjectId, ref: 'Photo', required: false })
+  photo: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'Video', required: false })
+  video: Types.ObjectId;
+
+  @Prop({ type: Number, default: 0 })
   views: number;
 
-  @Prop()
+  @Prop({ type: Number, default: 0 })
   shares: number;
 }
 

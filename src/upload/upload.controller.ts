@@ -4,24 +4,30 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  Request,
   UploadedFile,
   UploadedFiles,
-  UseInterceptors
+  UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 
 import { FileFieldsInterceptor, FileInterceptor } from '@nestjs/platform-express';
+import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { CloudinaryService } from 'src/cloudinary/cloudinary.service';
 import { restructureVideo } from 'src/helpers/restructureVideo.helper';
+import { UploadService } from './upload.service';
 
 @Controller('upload')
 export class UploadController {
   constructor(
+    private uploadService: UploadService,
     private cloudinaryService: CloudinaryService
   ) { }
 
   // ========Single image upload ========
   @Post('image-upload')
   @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
   @UseInterceptors(FileInterceptor('image'))
   async uploadImage(@UploadedFile() image: Express.Multer.File) {
     try {
@@ -35,23 +41,24 @@ export class UploadController {
   //========= Multiple image upload ==========//
   @Post('images-upload')
   @HttpCode(HttpStatus.OK)
-  @UseInterceptors(
-    FileFieldsInterceptor([{ name: 'images', maxCount: 5 }]),
-  )
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FileFieldsInterceptor([{ name: 'images', maxCount: 5 }]))
   async uploadImages(
     @UploadedFiles() files: { images?: Express.Multer.File[] },
+    @Request() req
   ) {
     try {
-      const uploadedImages = [];
+      const user = req.user;
+      const data = [];
 
       if (files.images?.length > 0) {
         for (const file of files.images) {
           const result = await this.cloudinaryService.uploadImage(file);
-          uploadedImages.push(result.secure_url);
+          data.push(result.secure_url);
         }
       }
 
-      return { success: true, data: uploadedImages };
+      return this.uploadService.createPhotos(user.id, data);
     } catch (error) {
       return { success: false, error: error.message };
     }
@@ -60,6 +67,7 @@ export class UploadController {
   // ======== Multiple image upload by name========
   @Post('multiple-upload')
   @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
   @UseInterceptors(
     FileFieldsInterceptor([
       { name: 'image', maxCount: 1 },
@@ -68,7 +76,7 @@ export class UploadController {
       { name: 'date_of_birth', maxCount: 1 },
       { name: 'passport', maxCount: 1 },
       { name: 'driving_license', maxCount: 1 },
-    ]),
+    ])
   )
   async uploadMultipleImages(
     @UploadedFiles()
@@ -78,21 +86,22 @@ export class UploadController {
       date_of_birth?: Express.Multer.File[];
       passport?: Express.Multer.File[];
       driving_license?: Express.Multer.File[];
-    },
-
+    }
   ) {
     try {
-      const uploadedImages = {};
+      const data = {};
       for (const key of Object.keys(files)) {
         if (files[key]?.length > 0) {
-          const result = await this.cloudinaryService.uploadImage(files[key][0]);
-          uploadedImages[key] = result.url;
+          const result = await this.cloudinaryService.uploadImage(
+            files[key][0]
+          );
+          data[key] = result.url;
         } else {
-          uploadedImages[key] = null;
+          data[key] = null;
         }
       }
 
-      return { success: true, data: uploadedImages };
+      return { success: true, data };
     } catch (error) {
       return { success: false, error: error.message };
     }
@@ -101,14 +110,23 @@ export class UploadController {
   // Upload video
   @Post('video-upload')
   @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
   @UseInterceptors(FileFieldsInterceptor([{ name: 'video', maxCount: 1 }]))
-  async uploadVideo(@UploadedFiles() files: { video?: Express.Multer.File[] }) {
+  async uploadVideo(
+    @UploadedFiles() files: { video?: Express.Multer.File[] },
+    @Request() req
+  ) {
     try {
+      const user = req.user;
+
       if (files.video?.length > 0) {
         const result = await this.cloudinaryService.uploadVideo(files.video[0]);
-        const urls = result.eager.map((transformation) => transformation.secure_url);
-        const data = restructureVideo(urls)
-        return { success: true, data };
+        const urls = result.eager.map(
+          (transformation) => transformation.secure_url
+        );
+        const data = restructureVideo(urls);
+
+        return this.uploadService.createVideo(user.id, data);
       }
       return { success: false, error: 'No video file uploaded' };
     } catch (error) {
@@ -131,5 +149,4 @@ export class UploadController {
   //     return { success: false, error: error.message };
   //   }
   // }
-
 }

@@ -13,11 +13,8 @@ export class Photo extends Document {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   user: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'Post', required: true })
-  post: Types.ObjectId;
-
   @Prop()
-  images: string[];
+  photos: string[];
 }
 
 export const PhotoSchema = SchemaFactory.createForClass(Photo);

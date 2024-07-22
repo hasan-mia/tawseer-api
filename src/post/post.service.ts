@@ -3,23 +3,23 @@ import { Injectable, InternalServerErrorException, NotFoundException } from '@ne
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { ApiFeatures } from 'src/helpers/apiFeatures.helper';
-import { Salon } from 'src/schemas/salon.schema';
+import { Post } from 'src/schemas/post.schema';
 import { RedisCacheService } from '../rediscloud.service';
 import { User } from '../schemas/user.schema';
-import { SalonDto } from './dto/salon.dto';
+import { PostDto } from './dto/post.dto';
 
 @Injectable()
-export class SalonService {
+export class PostService {
   constructor(
     @InjectModel(User.name)
     private userModel: Model<User>,
-    @InjectModel(Salon.name)
-    private salonModel: Model<Salon>,
+    @InjectModel(Post.name)
+    private postModel: Model<Post>,
     private readonly redisCacheService: RedisCacheService
   ) { }
 
-  // ======== Create new Salon ========
-  async createSalon(id: string, data: SalonDto) {
+  // ======== Create new post ========
+  async createPost(id: string, data: PostDto) {
 
     try {
       const user = await this.userModel.findById(id).exec();
@@ -28,29 +28,19 @@ export class SalonService {
         throw new NotFoundException('User not found');
       }
 
-      if (user.role !== 'vendor') {
-        throw new NotFoundException('Only vendor can create salon');
-      }
-
-      const exist = await this.salonModel.findOne({ vendor: id }).exec();
-
-      if (exist) {
-        throw new NotFoundException('Already have a salon');
-      }
-
       const finalData = {
-        vendor: id,
+        user: id,
         ...data,
       }
 
-      const saveData = await this.salonModel.create(finalData);
+      const saveData = await this.postModel.create(finalData);
 
       // remove caching
-      await this.redisCacheService.del('getAllSalon');
+      await this.redisCacheService.del('getAllPost');
 
       const result = {
         success: true,
-        message: 'Crate successfully',
+        message: 'Create successfully',
         data: saveData,
       };
 
@@ -60,8 +50,8 @@ export class SalonService {
     }
   }
 
-  // ======== Update salon Profile ========
-  async updateSalon(id: string, salonId: string, data: SalonDto) {
+  // ======== Update post ========
+  async updatePost(id: string, postId: string, data: PostDto) {
 
     try {
       const user = await this.userModel.findById(id).exec();
@@ -70,24 +60,24 @@ export class SalonService {
         throw new NotFoundException('User not found');
       }
 
-      const salon = await this.salonModel.findOne({ _id: salonId, vendor: id }).exec();
+      const exist = await this.postModel.findOne({ _id: postId, user: id }).exec();
 
-      if (!salon) {
-        throw new NotFoundException('Salon not found');
+      if (!exist) {
+        throw new NotFoundException('Post not found');
       }
 
-      const updatedSalonData = { ...salon.toObject(), ...data };
+      const updatedData = { ...exist.toObject(), ...data };
 
-      const updatedSalon = await this.salonModel.findByIdAndUpdate(salon._id, updatedSalonData);
+      const updatedSaveData = await this.postModel.findByIdAndUpdate(exist._id, updatedData);
 
       // remove caching
-      await this.redisCacheService.del('getAllSalon');
-      await this.redisCacheService.del(`salonInfo${salon._id}`);
+      await this.redisCacheService.del('getAllPost');
+      await this.redisCacheService.del(`postDetails${exist._id}`);
 
       const result = {
         success: true,
         message: 'Update successfully',
-        data: updatedSalon,
+        data: updatedSaveData,
       };
 
       return result;
@@ -96,10 +86,10 @@ export class SalonService {
     }
   }
 
-  // ======== Get All Salon ========
-  async getAllSalon(req: any) {
+  // ======== Get all post ========
+  async getAllPost(req: any) {
     try {
-      const cacheKey = 'getAllSalon';
+      const cacheKey = 'getAllPost';
       const cacheData = await this.redisCacheService.get(cacheKey);
       if (cacheData) {
         return cacheData;
@@ -119,10 +109,10 @@ export class SalonService {
         searchCriteria.name = keyword;
       }
 
-      const count = await this.salonModel.countDocuments(searchCriteria);
+      const count = await this.postModel.countDocuments(searchCriteria);
 
       const apiFeature = new ApiFeatures(
-        this.salonModel.find(searchCriteria).select('-__v').sort({ createdAt: -1 }),
+        this.postModel.find(searchCriteria).select('-__v').sort({ createdAt: -1 }),
         req.query,
       )
         .search()
@@ -175,21 +165,21 @@ export class SalonService {
     }
   }
 
-  // ======== Get single salon info by ID ========
-  async getSalonInfo(id: string) {
+  // ======== Get post details by ID ========
+  async getPostDetails(id: string) {
 
     try {
-      const cacheKey = `salonInfo${id}`;
+      const cacheKey = `postDetails${id}`;
       const cacheData = await this.redisCacheService.get(cacheKey);
 
       if (cacheData) {
         return cacheData;
       }
 
-      const data = await this.salonModel.findById(id).exec();
+      const data = await this.postModel.findById(id).exec();
 
       if (!data) {
-        throw new NotFoundException('Salon not found');
+        throw new NotFoundException('Post not found');
       }
 
       // remove caching
@@ -197,7 +187,7 @@ export class SalonService {
 
       const result = {
         success: true,
-        message: 'Salon found successfully',
+        message: 'Post found successfully',
         data: data,
       };
 

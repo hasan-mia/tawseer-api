@@ -8,9 +8,6 @@ import {
 
 export class SalonDto {
   @IsString()
-  readonly vendor: string;
-
-  @IsString()
   readonly name: string;
 
   @IsString()

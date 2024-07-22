@@ -10,6 +10,7 @@ import { CloudinaryModule } from './cloudinary/cloudinary.module';
 import { FileUploadModule } from './fileupload/fileupload.module';
 import { FriendModule } from './friend/friend.module';
 import { PaymentModule } from './payment/payment.module';
+import { PostModule } from './post/post.module';
 import { RedisCacheService } from './rediscloud.service';
 import { SalonModule } from './salon/salon.module';
 import { SocketModule } from './socket/socket.module';
@@ -42,6 +43,7 @@ import { UserModule } from './user/user.module';
     UploadModule,
     FriendModule,
     SalonModule,
+    PostModule,
   ],
   controllers: [AppController],
   providers: [AppService, RedisCacheService],

@@ -38,21 +38,22 @@ export class UserController {
   @Put('role/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @HttpCode(HttpStatus.ACCEPTED)
-  updateUserRole(@Param() id: string, @Body() data: UserProfileDto) {
+  async updateUserRole(@Param() id: string, @Body() data: UserProfileDto) {
     return this.userService.updateUserRole(id, data);
   }
 
   // ======== Get All User by admin ========
   @Get('all')
   @HttpCode(HttpStatus.OK)
-  getUserInfo(@Request() req) {
+  async getUserInfo(@Request() req) {
     return this.userService.allUser(req);
   }
 
   // ======== Get user info by ID ========
   @Get(':id')
   @HttpCode(HttpStatus.OK)
-  getAllUser(@Param() id: string) {
+  async getAllUser(@Request() req) {
+    const id = req.params.id;
     return this.userService.allUser(id);
   }
 }

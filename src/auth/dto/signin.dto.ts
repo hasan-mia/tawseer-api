@@ -1,6 +1,7 @@
+/* eslint-disable prettier/prettier */
 import { IsEmail, IsNotEmpty, IsStrongPassword } from 'class-validator';
 
-export class SigninDto {
+export class SignInDto {
   @IsNotEmpty()
   @IsEmail({}, { message: 'Please enter valid email' })
   readonly email: string;

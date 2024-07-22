@@ -14,7 +14,7 @@ import { generateRandomFourDigitOtp } from 'src/helpers/otp.helper';
 import { RedisCacheService } from 'src/rediscloud.service';
 import { User } from 'src/schemas/user.schema';
 import { OtpDto } from './dto/otp.dto';
-import { SigninDto } from './dto/signin.dto';
+import { SignInDto } from './dto/signin.dto';
 import { SignUpDto, UserRole } from './dto/signup.dto';
 import { EmailService } from './email.service';
 import { SmsService } from './sms.service';
@@ -70,7 +70,7 @@ export class AuthService {
   }
 
   // =========SignIn with email & password =============
-  async signIn(data: SigninDto) {
+  async signIn(data: SignInDto) {
     const { email, password } = data;
 
     try {

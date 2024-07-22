@@ -13,11 +13,8 @@ export class Video extends Document {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   user: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'Post', required: true })
-  post: Types.ObjectId;
-
   @Prop()
-  video: string[];
+  videos: string[];
 
 }
 

@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { OtpDto } from './dto/otp.dto';
-import { SigninDto } from './dto/signin.dto';
+import { SignInDto } from './dto/signin.dto';
 import { SignUpDto } from './dto/signup.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { RolesGuard } from './role.guard';
@@ -32,7 +32,7 @@ export class AuthController {
   // ======== Sing with email and password ========
   @Post('signin')
   @HttpCode(HttpStatus.OK)
-  signIn(@Body() data: SigninDto) {
+  signIn(@Body() data: SignInDto) {
     return this.authService.signIn(data);
   }
 
