@@ -9,12 +9,13 @@ import { Model } from 'mongoose';
 import { ApiFeatures } from 'src/helpers/apiFeatures.helper';
 import { Comment } from 'src/schemas/comment.schema';
 import { Post } from 'src/schemas/post.schema';
+import { Reply } from 'src/schemas/reply.schema';
 import { RedisCacheService } from '../rediscloud.service';
 import { User } from '../schemas/user.schema';
-import { CommentDto } from './dto/comment.dto';
+import { ReplyDto } from './dto/reply.dto';
 
 @Injectable()
-export class CommentService {
+export class ReplyService {
   constructor(
     @InjectModel(User.name)
     private userModel: Model<User>,
@@ -22,11 +23,13 @@ export class CommentService {
     private postModel: Model<Post>,
     @InjectModel(Comment.name)
     private commentModel: Model<Comment>,
+    @InjectModel(Reply.name)
+    private replyModel: Model<Reply>,
     private readonly redisCacheService: RedisCacheService
   ) { }
 
-  // ======== Create new comment ========
-  async createComment(userId: string, postId: string, data: CommentDto) {
+  // ======== Create new reply ========
+  async createReply(userId: string, postId: string, data: ReplyDto) {
     try {
       const user = await this.userModel.findById(userId).exec();
 
@@ -40,10 +43,11 @@ export class CommentService {
         ...data,
       };
 
-      const saveData = await this.commentModel.create(finalData);
+      const saveData = await this.replyModel.create(finalData);
 
       // remove caching
       await this.redisCacheService.del(`getAllComment${postId}`);
+      await this.redisCacheService.del(`getAllReply${postId}`);
 
       const result = {
         success: true,
@@ -57,8 +61,8 @@ export class CommentService {
     }
   }
 
-  // ======== Update comment ========
-  async updateComment(userId: string, commentId: string, data: CommentDto) {
+  // ======== Update reply ========
+  async updateReply(userId: string, commentId: string, data: ReplyDto) {
     try {
       const user = await this.userModel.findById(userId).exec();
 
@@ -66,7 +70,7 @@ export class CommentService {
         throw new NotFoundException('User not found');
       }
 
-      const exist = await this.commentModel
+      const exist = await this.replyModel
         .findOne({ _id: commentId, user: userId })
         .exec();
 
@@ -76,13 +80,14 @@ export class CommentService {
 
       const updatedData = { ...exist.toObject(), ...data };
 
-      const updatedSaveData = await this.commentModel.findByIdAndUpdate(
+      const updatedSaveData = await this.replyModel.findByIdAndUpdate(
         exist._id,
         updatedData
       );
 
       // remove caching
       await this.redisCacheService.del(`getAllComment${exist.post}`);
+      await this.redisCacheService.del(`getAllReply${exist.post}`);
 
       const result = {
         success: true,
@@ -96,11 +101,11 @@ export class CommentService {
     }
   }
 
-  // ======== Get all comment by post ID ========
-  async getCommentByPostId(req: any) {
+  // ======== Get all reply by comment ID ========
+  async getReplyByCommentId(req: any) {
     const postId = req.params.id;
     try {
-      const cacheKey = `getAllComment${postId}`;
+      const cacheKey = `getAllReply${postId}`;
       const cacheData = await this.redisCacheService.get(cacheKey);
       if (cacheData) {
         return cacheData;
@@ -120,10 +125,10 @@ export class CommentService {
         searchCriteria.name = keyword;
       }
 
-      const count = await this.commentModel.countDocuments(searchCriteria);
+      const count = await this.replyModel.countDocuments(searchCriteria);
 
       const apiFeature = new ApiFeatures(
-        this.commentModel
+        this.replyModel
           .find(searchCriteria)
           .select('-__v')
           .sort({ createdAt: -1 }),

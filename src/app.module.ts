@@ -13,6 +13,7 @@ import { FriendModule } from './friend/friend.module';
 import { PaymentModule } from './payment/payment.module';
 import { PostModule } from './post/post.module';
 import { CommentModule } from './postcomment/comment.module';
+import { ReplyModule } from './postreply/reply.module';
 import { RedisCacheService } from './rediscloud.service';
 import { SalonModule } from './salon/salon.module';
 import { AppointmentModule } from './salonAppointment/appointment.module';
@@ -54,6 +55,7 @@ import { UserModule } from './user/user.module';
     CouponModule,
     PostModule,
     CommentModule,
+    ReplyModule,
   ],
   controllers: [AppController],
   providers: [AppService, RedisCacheService],

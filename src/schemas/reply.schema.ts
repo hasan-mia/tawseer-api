@@ -25,6 +25,9 @@ export class Reply extends Document {
   @Prop()
   image: string;
 
+  @Prop({ type: Boolean, default: false })
+  is_deleted: boolean;
+
 }
 
 export const ReplySchema = SchemaFactory.createForClass(Reply);
