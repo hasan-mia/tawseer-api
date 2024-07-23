@@ -29,7 +29,7 @@ export class Coupon extends Document {
   type: string;
 
   @Prop({ type: Date, required: true })
-  expired: Date;
+  expiredAt: Date;
 }
 
-export const CouponFollowSchema = SchemaFactory.createForClass(Coupon);
+export const CouponSchema = SchemaFactory.createForClass(Coupon);
