@@ -7,10 +7,12 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { CloudinaryModule } from './cloudinary/cloudinary.module';
+import { CouponModule } from './coupon/coupon.module';
 import { FileUploadModule } from './fileupload/fileupload.module';
 import { FriendModule } from './friend/friend.module';
 import { PaymentModule } from './payment/payment.module';
 import { PostModule } from './post/post.module';
+import { CommentModule } from './postcomment/comment.module';
 import { RedisCacheService } from './rediscloud.service';
 import { SalonModule } from './salon/salon.module';
 import { AppointmentModule } from './salonAppointment/appointment.module';
@@ -46,10 +48,12 @@ import { UserModule } from './user/user.module';
     UploadModule,
     FriendModule,
     SalonModule,
-    PostModule,
     ServiceModule,
     ReviewModule,
-    AppointmentModule
+    AppointmentModule,
+    CouponModule,
+    PostModule,
+    CommentModule,
   ],
   controllers: [AppController],
   providers: [AppService, RedisCacheService],
