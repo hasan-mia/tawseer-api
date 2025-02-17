@@ -4,10 +4,10 @@ import { Injectable } from '@nestjs/common';
 
 @Injectable()
 export class EmailService {
-  constructor(private readonly mailService: MailerService) { }
+    constructor(private readonly mailService: MailerService) { }
 
-  sendMail(options: any) {
-    const htmlTemplate = `
+    sendMail(options: any) {
+        const htmlTemplate = `
         <!DOCTYPE html>
         <html lang="en">
         <head>
@@ -48,12 +48,12 @@ export class EmailService {
         </html>
     `;
 
-    const mailOptions = {
-      from: `Salon <${'admin@ensellers.com'}>`,
-      to: options.email,
-      subject: options.subject,
-      html: htmlTemplate,
-    };
-    this.mailService.sendMail(mailOptions);
-  }
+        const mailOptions = {
+            from: `Salon <${process.env.SMTP_MAIL}>`,
+            to: options.email,
+            subject: options.subject,
+            html: htmlTemplate,
+        };
+        this.mailService.sendMail(mailOptions);
+    }
 }

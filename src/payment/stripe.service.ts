@@ -1,12 +1,12 @@
 import Stripe from 'stripe';
-import {StripePaymentDto} from './dto/stripepayment.dto';
+import { StripePaymentDto } from './dto/stripepayment.dto';
 
 export class StripeService {
   private readonly stripe: Stripe;
 
   constructor() {
     this.stripe = new Stripe(process.env.STRIPE_API_SECRET_KEY, {
-      apiVersion: '2024-06-20',
+      apiVersion: '2024-06-20' as "2025-01-27.acacia",
     });
   }
 

@@ -36,3 +36,4 @@ lerna-debug.log*
 !.vscode/extensions.json
 .vercel
 pnpm-lock.yaml*
+package-lock.json*

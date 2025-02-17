@@ -1,16 +1,16 @@
-import {ValidationPipe} from '@nestjs/common';
-import {NestFactory} from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
+import { NestFactory } from '@nestjs/core';
 import * as dotenv from 'dotenv';
 import * as express from 'express';
 import helmet from 'helmet';
 import * as path from 'path';
-import {AppModule} from './app.module';
+import { AppModule } from './app.module';
 
 dotenv.config();
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  app.setGlobalPrefix('salon');
+  app.setGlobalPrefix('/api');
   app.enableCors({
     origin: '*',
     credentials: true,
@@ -20,6 +20,6 @@ async function bootstrap() {
 
   app.use('/public', express.static(path.join(__dirname, '..', 'public')));
   app.use(helmet());
-  await app.listen(5000);
+  await app.listen(2323);
 }
 bootstrap();
