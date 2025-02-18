@@ -1,4 +1,5 @@
 /* eslint-disable prettier/prettier */
+import { RedisCacheService } from '@/rediscloud.service';
 import {
   Injectable,
   InternalServerErrorException,
@@ -10,7 +11,6 @@ import { ApiFeatures } from 'src/helpers/apiFeatures.helper';
 import { Comment } from 'src/schemas/comment.schema';
 import { Post } from 'src/schemas/post.schema';
 import { Reply } from 'src/schemas/reply.schema';
-import { RedisCacheService } from '../rediscloud.service';
 import { User } from '../schemas/user.schema';
 import { ReplyDto } from './dto/reply.dto';
 

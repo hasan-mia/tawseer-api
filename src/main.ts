@@ -10,7 +10,7 @@ dotenv.config();
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  app.setGlobalPrefix('/api');
+  app.setGlobalPrefix('/salon');
   app.enableCors({
     origin: '*',
     credentials: true,
@@ -20,6 +20,6 @@ async function bootstrap() {
 
   app.use('/public', express.static(path.join(__dirname, '..', 'public')));
   app.use(helmet());
-  await app.listen(2323);
+  await app.listen(5000);
 }
 bootstrap();

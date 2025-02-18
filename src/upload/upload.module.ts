@@ -1,8 +1,8 @@
 /* eslint-disable prettier/prettier */
+import { RedisCacheService } from '@/rediscloud.service';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { CloudinaryService } from 'src/cloudinary/cloudinary.service';
-import { RedisCacheService } from 'src/rediscloud.service';
 import { PhotoSchema } from 'src/schemas/photo.schema';
 import { UserSchema } from 'src/schemas/user.schema';
 import { VideoSchema } from 'src/schemas/video.schema';

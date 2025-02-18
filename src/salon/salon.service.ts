@@ -1,10 +1,10 @@
 /* eslint-disable prettier/prettier */
+import { RedisCacheService } from '@/rediscloud.service';
 import { Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { ApiFeatures } from 'src/helpers/apiFeatures.helper';
 import { Salon } from 'src/schemas/salon.schema';
-import { RedisCacheService } from '../rediscloud.service';
 import { User } from '../schemas/user.schema';
 import { SalonDto } from './dto/salon.dto';
 

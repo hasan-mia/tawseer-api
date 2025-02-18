@@ -2,13 +2,13 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { CloudinaryService } from 'src/cloudinary/cloudinary.service';
-import { RedisCacheService } from 'src/rediscloud.service';
 import { SalonSchema } from 'src/schemas/salon.schema';
 import { ReviewSchema } from 'src/schemas/salonReview.schema';
 import { ServiceSchema } from 'src/schemas/salonService.schema';
 import { UserSchema } from '../schemas/user.schema';
 import { ReviewController } from './review.controller';
 import { ReviewService } from './review.service';
+import { RedisCacheService } from '@/rediscloud.service';
 
 @Module({
   imports: [

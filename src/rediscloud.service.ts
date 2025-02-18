@@ -1,31 +1,43 @@
-/* eslint-disable prettier/prettier */
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import Redis from 'ioredis';
 
 @Injectable()
-export class RedisCacheService {
+export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RedisCacheService.name);
-  private readonly client: Redis;
+  private static client: Redis;
 
   constructor() {
-    this.client = new Redis({
-      host: process.env.REDIS_HOST,
-      port: parseInt(process.env.REDIS_PORT),
-      password: process.env.REDIS_PASS,
-    });
+    if (!RedisCacheService.client) {
+      RedisCacheService.client = new Redis({
+        host: process.env.REDIS_HOST,
+        port: parseInt(process.env.REDIS_PORT),
+        password: process.env.REDIS_PASS,
+        maxRetriesPerRequest: null,
+        enableAutoPipelining: true,
+      });
 
-    this.client.on('connect', () => {
-      this.logger.log('Connected to Redis');
-    });
+      RedisCacheService.client.on('connect', () => {
+        this.logger.log('Connected to Redis');
+      });
 
-    this.client.on('error', (error) => {
-      this.logger.error(`Error connecting to Redis: ${error.message}`);
-    });
+      RedisCacheService.client.on('error', (error) => {
+        this.logger.error(`Error connecting to Redis: ${error.message}`);
+      });
+    }
+  }
+
+  onModuleInit() {
+    this.logger.log('RedisCacheService initialized');
+  }
+
+  onModuleDestroy() {
+    this.logger.log('Closing Redis connection');
+    RedisCacheService.client.quit();
   }
 
   async set(key: string, value: any, ttl: number): Promise<void> {
     try {
-      await this.client.set(key, JSON.stringify(value), 'EX', ttl);
+      await RedisCacheService.client.set(key, JSON.stringify(value), 'EX', ttl);
       this.logger.log(`Value set in Redis for key: ${key}`);
     } catch (error) {
       this.logger.error(`Error setting value in Redis: ${error.message}`);
@@ -35,7 +47,7 @@ export class RedisCacheService {
 
   async get(key: string): Promise<any | null> {
     try {
-      const value = await this.client.get(key);
+      const value = await RedisCacheService.client.get(key);
       return value ? JSON.parse(value) : null;
     } catch (error) {
       this.logger.error(`Error getting value from Redis: ${error.message}`);
@@ -45,7 +57,7 @@ export class RedisCacheService {
 
   async del(key: string): Promise<void> {
     try {
-      await this.client.del(key);
+      await RedisCacheService.client.del(key);
       this.logger.log(`Value deleted from Redis for key: ${key}`);
     } catch (error) {
       this.logger.error(`Error deleting value from Redis: ${error.message}`);
