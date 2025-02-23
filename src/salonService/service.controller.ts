@@ -5,6 +5,8 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Param,
+  Post,
   Put,
   Request,
   UseGuards,
@@ -14,12 +16,12 @@ import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { ServiceDto } from './dto/service.dto';
 import { ServiceService } from './service.service';
 
-@Controller('service')
+@Controller('services')
 export class ServiceController {
   constructor(private serviceService: ServiceService) { }
 
   // ======== Create service ========
-  @Put('create')
+  @Post('')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.CREATED)
   async createService(@Body() data: ServiceDto, @Request() req) {
@@ -28,17 +30,16 @@ export class ServiceController {
   }
 
   // ======== Update service ========
-  @Put('update/:id')
+  @Put(':id')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.ACCEPTED)
-  async updateService(@Body() data: ServiceDto, @Request() req) {
+  async updateService(@Param('id') id: string, @Body() data: ServiceDto, @Request() req) {
     const user = req.user;
-    const postId = req.params.id;
-    return this.serviceService.updateService(user.id, postId, data);
+    return this.serviceService.updateService(user.id, id, data);
   }
 
   // ======== Get all service ========
-  @Get('all')
+  @Get('')
   @HttpCode(HttpStatus.OK)
   async getAllService(@Request() req) {
     return this.serviceService.getAllService(req);
@@ -53,9 +54,9 @@ export class ServiceController {
   }
 
   // ======== Get service details by id ========
-  @Get('all/:id')
+  @Get('salon/:id')
   @HttpCode(HttpStatus.OK)
-  async getAllServiceBySalonId(@Request() req) {
-    return this.serviceService.getAllServiceBySalonId(req);
+  async getAllServiceBySalonId(@Param('id') id: string, @Request() req) {
+    return this.serviceService.getAllServiceBySalonId(id, req);
   }
 }

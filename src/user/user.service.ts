@@ -2,7 +2,6 @@
 import { Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { ApiFeatures } from 'src/helpers/apiFeatures.helper';
 import { RedisCacheService } from '../rediscloud.service';
 import { User } from '../schemas/user.schema';
 import { UserDto } from './dto/user.dto';
@@ -28,7 +27,7 @@ export class UserService {
 
       const updatedUserData = { ...user.toObject(), ...data };
 
-      const updatedUser = await this.userModel.findByIdAndUpdate(id, updatedUserData);
+      const updatedUser = await this.userModel.findByIdAndUpdate(id, updatedUserData, { new: true, upsert: true });
 
       // remove caching
       await this.redisCacheService.del('getAllUser');
@@ -48,16 +47,17 @@ export class UserService {
   }
 
   // ========= Change user role ======
-  async updateUserRole(id: string, data: UserDto) {
+  async updateUserInfo(id: string, data: UserDto) {
     try {
-      const user = await this.userModel.findByIdAndUpdate(id).exec();
+      const user = await this.userModel.findOne({ _id: id }).exec();
 
       if (!user) {
         throw new NotFoundException('Use not found');
       }
-      const updatedData = await this.userModel
-        .updateOne({ _id: id }, { role: data.role })
-        .exec();
+
+      const updatedUserData = { ...user.toObject(), ...data };
+
+      const updatedData = await this.userModel.findByIdAndUpdate(id, updatedUserData, { new: true, upsert: true });
 
       // remove caching
       await this.redisCacheService.del('getAllUser');
@@ -70,7 +70,7 @@ export class UserService {
         data: updatedData
       }
 
-      return result;
+      return result
 
     } catch (error) {
       throw new InternalServerErrorException(error.message);
@@ -112,61 +112,75 @@ export class UserService {
   // ======== Get All User by admin ========
   async allUser(req: any) {
     try {
-      const cacheKey = 'getAllUser';
+      const cacheKey = `getAllUser:${JSON.stringify(req.query)}`;
       const cacheData = await this.redisCacheService.get(cacheKey);
       if (cacheData) {
         return cacheData;
       }
 
-      const { keyword } = req.query;
+      const { keyword, gender, role, is_disabled, is_deleted, limit, page } = req.query;
 
-      let perPage: number | undefined;
-
-      if (req.query && typeof req.query.limit === 'string') {
-        perPage = parseInt(req.query.limit, 10)
+      let perPage: number = 10;
+      if (limit && !isNaN(parseInt(limit, 10))) {
+        perPage = parseInt(limit, 10);
       }
 
-      // Construct the search criteria
-      const searchCriteria = { name: String || null };
+      const currentPage = page && !isNaN(parseInt(page, 10)) ? parseInt(page, 10) : 1;
+      const skip = (currentPage - 1) * perPage;
+
+      const searchCriteria: any = {};
+
       if (keyword) {
-        searchCriteria.name = keyword;
+        searchCriteria.$or = [
+          { first_name: { $regex: keyword, $options: 'i' } },
+          { last_name: { $regex: keyword, $options: 'i' } },
+          { email: { $regex: keyword, $options: 'i' } },
+          { mobile: { $regex: keyword, $options: 'i' } },
+          { username: { $regex: keyword, $options: 'i' } },
+        ];
       }
 
+      if (gender) {
+        searchCriteria.gender = gender;
+      }
+
+      if (role) {
+        searchCriteria.role = role;
+      }
+
+      if (is_disabled) {
+        searchCriteria.is_disabled = is_disabled;
+      }
+
+      if (is_deleted) {
+        searchCriteria.is_deleted = is_deleted;
+      }
+
+      // Count total users matching the search criteria
       const count = await this.userModel.countDocuments(searchCriteria);
 
-      const apiFeature = new ApiFeatures(
-        this.userModel.find(searchCriteria).select('-__v -password').sort({ createdAt: -1 }),
-        req.query,
-      )
-        .search()
-        .filter();
+      // Get paginated user data
+      const result = await this.userModel
+        .find(searchCriteria)
+        .select('-__v -password')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(perPage);
 
-      if (perPage !== undefined) {
-        apiFeature.pagination(perPage)
-      }
+      // Calculate total pages
+      const totalPages = Math.ceil(count / perPage);
 
-      const result = await apiFeature.query
-      const limit = result.length
+      let nextPage: number | null = null;
+      let nextUrl: string | null = null;
 
-      const currentPage = req.query.page
-        ? parseInt(req.query.page as string, 10)
-        : 1
-
-      let totalPages: number | undefined;
-
-      if (perPage !== undefined) {
-        totalPages = Math.ceil(count / perPage)
-      }
-
-      let nextPage: number | null = null
-      let nextUrl: string | null = null
-
-      if (perPage !== undefined && currentPage < totalPages!) {
-        nextPage = currentPage + 1
-        nextUrl = `${req.originalUrl.split('?')[0]}?limit=${perPage}&page=${nextPage}`
-        if (keyword) {
-          nextUrl += `&keyword=${keyword}`;
-        }
+      if (currentPage < totalPages) {
+        nextPage = currentPage + 1;
+        nextUrl = `${req.originalUrl.split('?')[0]}?limit=${perPage}&page=${nextPage}`;
+        if (keyword) nextUrl += `&keyword=${keyword}`;
+        if (gender) nextUrl += `&gender=${gender}`;
+        if (role) nextUrl += `&role=${role}`;
+        if (is_disabled) nextUrl += `&is_disabled=${is_disabled}`;
+        if (is_deleted) nextUrl += `&is_deleted=${is_deleted}`;
       }
 
       const data = {
@@ -174,19 +188,22 @@ export class UserService {
         data: result || [],
         total: count,
         perPage,
-        limit,
+        limit: result.length,
+        currentPage,
+        totalPages,
         nextPage,
         nextUrl,
-      }
+      };
 
+      // Store in cache
       await this.redisCacheService.set(cacheKey, data, 1800);
 
       return data;
-
     } catch (error) {
       throw new InternalServerErrorException(error.message);
     }
   }
+
 
   // ======== Get user info by ID ========
 

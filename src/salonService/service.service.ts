@@ -5,8 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import { ApiFeatures } from 'src/helpers/apiFeatures.helper';
+import { Model, Types } from 'mongoose';
 import { Salon } from 'src/schemas/salon.schema';
 import { Service } from 'src/schemas/salonService.schema';
 import { RedisCacheService } from '../rediscloud.service';
@@ -41,7 +40,7 @@ export class ServiceService {
       }
 
       const finalData = {
-        user: id,
+        vendor: id,
         salon: salon._id,
         ...data,
       };
@@ -73,23 +72,25 @@ export class ServiceService {
       }
 
       const exist = await this.serviceModel
-        .findOne({ _id: postId, user: id })
+        .findOne({ _id: postId, vendor: id })
         .exec();
 
       if (!exist) {
-        throw new NotFoundException('Post not found');
+        throw new NotFoundException('Service not found');
       }
 
       const updatedData = { ...exist.toObject(), ...data };
 
       const updatedSaveData = await this.serviceModel.findByIdAndUpdate(
         exist._id,
-        updatedData
+        updatedData,
+        { new: true, upsert: true },
       );
 
       // remove caching
       await this.redisCacheService.del('getAllService');
       await this.redisCacheService.del(`serviceDetails${exist._id}`);
+      await this.redisCacheService.del(`getAllService-${id}`);
 
       const result = {
         success: true,
@@ -106,63 +107,71 @@ export class ServiceService {
   // ======== Get all service ========
   async getAllService(req: any) {
     try {
-      const cacheKey = 'getAllService';
+      const cacheKey = `getAllService:${JSON.stringify(req.query)}`;
       const cacheData = await this.redisCacheService.get(cacheKey);
       if (cacheData) {
         return cacheData;
       }
 
-      const { keyword } = req.query;
+      const { keyword, price, cat, limit, page } = req.query;
 
       let perPage: number | undefined;
-
-      if (req.query && typeof req.query.limit === 'string') {
-        perPage = parseInt(req.query.limit, 10);
+      if (typeof limit === 'string') {
+        perPage = parseInt(limit, 10);
       }
 
-      // Construct the search criteria
-      const searchCriteria = { name: String || null };
+      const searchCriteria: any = {};
+
       if (keyword) {
-        searchCriteria.name = keyword;
+        searchCriteria.$or = [
+          { name: { $regex: keyword, $options: 'i' } },
+          { description: { $regex: keyword, $options: 'i' } },
+        ];
+      }
+
+      if (price) {
+        const priceFilter: any = {};
+        if (price.gte) priceFilter.$gte = price.gte;
+        if (price.lte) priceFilter.$lte = price.lte;
+        searchCriteria.price = priceFilter;
+      }
+
+      if (cat) {
+        searchCriteria.category = cat;
       }
 
       const count = await this.serviceModel.countDocuments(searchCriteria);
 
-      const apiFeature = new ApiFeatures(
-        this.serviceModel
-          .find(searchCriteria)
-          .select('-__v')
-          .sort({ createdAt: -1 }),
-        req.query
-      )
-        .search()
-        .filter();
+      const currentPage = page ? parseInt(page as string, 10) : 1;
+      const skip = perPage ? (currentPage - 1) * perPage : 0;
 
-      if (perPage !== undefined) {
-        apiFeature.pagination(perPage);
+      const query = this.serviceModel
+        .find(searchCriteria)
+        .populate('salon', 'name mobile email')
+        .populate('vendor', 'name email mobile')
+        .select('-__v')
+        .sort({ createdAt: -1 })
+        .skip(skip);
+
+      if (perPage) {
+        query.limit(perPage);
       }
 
-      const result = await apiFeature.query;
-      const limit = result.length;
+      const result = await query.exec();
 
-      const currentPage = req.query.page
-        ? parseInt(req.query.page as string, 10)
-        : 1;
-
-      let totalPages: number | undefined;
-
-      if (perPage !== undefined) {
-        totalPages = Math.ceil(count / perPage);
-      }
+      const totalPages = perPage ? Math.ceil(count / perPage) : 1;
 
       let nextPage: number | null = null;
       let nextUrl: string | null = null;
 
-      if (perPage !== undefined && currentPage < totalPages!) {
+      if (perPage && currentPage < totalPages) {
         nextPage = currentPage + 1;
         nextUrl = `${req.originalUrl.split('?')[0]}?limit=${perPage}&page=${nextPage}`;
         if (keyword) {
           nextUrl += `&keyword=${keyword}`;
+        }
+        if (cat) {
+          nextUrl += `&cat=${cat}`;
         }
       }
 
@@ -171,11 +180,14 @@ export class ServiceService {
         data: result || [],
         total: count,
         perPage,
-        limit,
+        limit: result.length,
+        currentPage,
+        totalPages,
         nextPage,
         nextUrl,
       };
 
+      // Cache the data
       await this.redisCacheService.set(cacheKey, data, 1800);
 
       return data;
@@ -194,7 +206,10 @@ export class ServiceService {
         return cacheData;
       }
 
-      const data = await this.serviceModel.findById(id).exec();
+      const data = await this.serviceModel.findById(id)
+        .populate('salon', 'name mobile email')
+        .populate('vendor', 'name email mobile')
+        .exec();
 
       if (!data) {
         throw new NotFoundException('Post not found');
@@ -216,66 +231,78 @@ export class ServiceService {
   }
 
   // ======== Get all service by salon ID ========
-  async getAllServiceBySalonId(req: any) {
-    const salonId = req.params.id;
+  async getAllServiceBySalonId(id: string, req: any) {
     try {
-      const cacheKey = `getAllSalonService${salonId}`;
+      const cacheKey = `getAllService-${id}`;
       const cacheData = await this.redisCacheService.get(cacheKey);
       if (cacheData) {
         return cacheData;
       }
 
-      const { keyword } = req.query;
-
-      let perPage: number | undefined;
-
-      if (req.query && typeof req.query.limit === 'string') {
-        perPage = parseInt(req.query.limit, 10);
+      const salonExists = await this.salonModel.findById(id);
+      if (!salonExists) {
+        throw new NotFoundException('Salon not found');
       }
 
-      // Construct the search criteria
-      const searchCriteria = { salon: salonId, name: String || null };
+      const { keyword, price, cat, limit, page } = req.query;
+
+      let perPage: number | undefined;
+      if (typeof limit === 'string') {
+        perPage = parseInt(limit, 10);
+      }
+
+      const searchCriteria: any = { salon: new Types.ObjectId(id), is_deleted: false, };
+
       if (keyword) {
-        searchCriteria.name = keyword;
+        searchCriteria.$or = [
+          { name: { $regex: keyword, $options: 'i' } },
+          { description: { $regex: keyword, $options: 'i' } },
+        ];
+      }
+
+      if (price) {
+        const priceFilter: any = {};
+        if (price.gte) priceFilter.$gte = price.gte;
+        if (price.lte) priceFilter.$lte = price.lte;
+        searchCriteria.price = priceFilter;
+      }
+
+      if (cat) {
+        searchCriteria.category = cat;
       }
 
       const count = await this.serviceModel.countDocuments(searchCriteria);
 
-      const apiFeature = new ApiFeatures(
-        this.serviceModel
-          .find(searchCriteria)
-          .select('-__v')
-          .sort({ createdAt: -1 }),
-        req.query
-      )
-        .search()
-        .filter();
+      const currentPage = page ? parseInt(page as string, 10) : 1;
+      const skip = perPage ? (currentPage - 1) * perPage : 0;
 
-      if (perPage !== undefined) {
-        apiFeature.pagination(perPage);
+      const query = this.serviceModel
+        .find(searchCriteria)
+        .populate('salon', 'name mobile email')
+        .populate('vendor', 'name email mobile')
+        .select('-__v')
+        .sort({ createdAt: -1 })
+        .skip(skip);
+
+      if (perPage) {
+        query.limit(perPage);
       }
 
-      const result = await apiFeature.query;
-      const limit = result.length;
+      const result = await query.exec();
 
-      const currentPage = req.query.page
-        ? parseInt(req.query.page as string, 10)
-        : 1;
-
-      let totalPages: number | undefined;
-
-      if (perPage !== undefined) {
-        totalPages = Math.ceil(count / perPage);
-      }
+      const totalPages = perPage ? Math.ceil(count / perPage) : 1;
 
       let nextPage: number | null = null;
       let nextUrl: string | null = null;
 
-      if (perPage !== undefined && currentPage < totalPages!) {
+      if (perPage && currentPage < totalPages) {
         nextPage = currentPage + 1;
         nextUrl = `${req.originalUrl.split('?')[0]}?limit=${perPage}&page=${nextPage}`;
         if (keyword) {
           nextUrl += `&keyword=${keyword}`;
+        }
+        if (cat) {
+          nextUrl += `&cat=${cat}`;
         }
       }
 
@@ -284,11 +311,14 @@ export class ServiceService {
         data: result || [],
         total: count,
         perPage,
-        limit,
+        limit: result.length,
+        currentPage,
+        totalPages,
         nextPage,
         nextUrl,
       };
 
+      // Cache the data
       await this.redisCacheService.set(cacheKey, data, 1800);
 
       return data;
@@ -296,4 +326,5 @@ export class ServiceService {
       throw new InternalServerErrorException(error.message);
     }
   }
+
 }

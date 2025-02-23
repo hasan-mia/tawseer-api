@@ -3,7 +3,6 @@ import { RedisCacheService } from '@/rediscloud.service';
 import { Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { ApiFeatures } from 'src/helpers/apiFeatures.helper';
 import { Salon } from 'src/schemas/salon.schema';
 import { User } from '../schemas/user.schema';
 import { SalonDto } from './dto/salon.dto';
@@ -78,7 +77,7 @@ export class SalonService {
 
       const updatedSalonData = { ...salon.toObject(), ...data };
 
-      const updatedSalon = await this.salonModel.findByIdAndUpdate(salon._id, updatedSalonData);
+      const updatedSalon = await this.salonModel.findByIdAndUpdate(salon._id, updatedSalonData, { new: true, upsert: true });
 
       // remove caching
       await this.redisCacheService.del('getAllSalon');
@@ -105,54 +104,53 @@ export class SalonService {
         return cacheData;
       }
 
-      const { keyword } = req.query;
+      const { keyword, limit, page, vendor } = req.query;
 
       let perPage: number | undefined;
 
-      if (req.query && typeof req.query.limit === 'string') {
-        perPage = parseInt(req.query.limit, 10)
+      if (limit && typeof limit === 'string') {
+        perPage = parseInt(limit, 10);
       }
 
-      // Construct the search criteria
-      const searchCriteria = { name: String || null };
+      const searchCriteria: any = {};
+
       if (keyword) {
-        searchCriteria.name = keyword;
+        searchCriteria.$or = [
+          { name: { $regex: keyword, $options: 'i' } },
+          { mobile: { $regex: keyword, $options: 'i' } },
+        ];
+      }
+
+      if (vendor) {
+        searchCriteria.vendor = vendor;
       }
 
       const count = await this.salonModel.countDocuments(searchCriteria);
 
-      const apiFeature = new ApiFeatures(
-        this.salonModel.find(searchCriteria).select('-__v').sort({ createdAt: -1 }),
-        req.query,
-      )
-        .search()
-        .filter();
+      const currentPage = page ? parseInt(page as string, 10) : 1;
+      const skip = perPage ? perPage * (currentPage - 1) : 0;
 
-      if (perPage !== undefined) {
-        apiFeature.pagination(perPage)
-      }
+      const result = await this.salonModel
+        .find(searchCriteria)
+        .populate("vendor", "first_name last_name email mobile")
+        .select('-__v')
+        .skip(skip)
+        .limit(perPage || 10)
+        .sort({ createdAt: -1 })
+        .exec();
 
-      const result = await apiFeature.query
-      const limit = result.length
+      const totalPages = perPage ? Math.ceil(count / perPage) : 1;
+      let nextPage: number | null = null;
+      let nextUrl: string | null = null;
 
-      const currentPage = req.query.page
-        ? parseInt(req.query.page as string, 10)
-        : 1
-
-      let totalPages: number | undefined;
-
-      if (perPage !== undefined) {
-        totalPages = Math.ceil(count / perPage)
-      }
-
-      let nextPage: number | null = null
-      let nextUrl: string | null = null
-
-      if (perPage !== undefined && currentPage < totalPages!) {
-        nextPage = currentPage + 1
-        nextUrl = `${req.originalUrl.split('?')[0]}?limit=${perPage}&page=${nextPage}`
+      if (perPage && currentPage < totalPages) {
+        nextPage = currentPage + 1;
+        nextUrl = `${req.originalUrl.split('?')[0]}?limit=${perPage}&page=${nextPage}`;
         if (keyword) {
           nextUrl += `&keyword=${keyword}`;
+        }
+        if (vendor) {
+          nextUrl += `&vendor=${vendor}`;
         }
       }
 
@@ -161,19 +159,20 @@ export class SalonService {
         data: result || [],
         total: count,
         perPage,
-        limit,
+        limit: result.length,
         nextPage,
         nextUrl,
-      }
+      };
 
+      // Cache the result
       await this.redisCacheService.set(cacheKey, data, 1800);
 
       return data;
-
     } catch (error) {
       throw new InternalServerErrorException(error.message);
     }
   }
+
 
   // ======== Get single salon info by ID ========
   async getSalonInfo(id: string) {
@@ -186,7 +185,7 @@ export class SalonService {
         return cacheData;
       }
 
-      const data = await this.salonModel.findById(id).exec();
+      const data = await this.salonModel.findById(id).populate("vendor", "first_name last_name email mobile").exec();
 
       if (!data) {
         throw new NotFoundException('Salon not found');

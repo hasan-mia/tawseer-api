@@ -43,6 +43,9 @@ export class Salon extends Document {
   @Prop({ type: Boolean, default: false })
   is_deleted: boolean;
 
+  @Prop({ type: Boolean, default: false })
+  is_disabled: boolean;
+
 }
 
 export const SalonSchema = SchemaFactory.createForClass(Salon);

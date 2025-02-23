@@ -1,9 +1,8 @@
 import {
   IsArray,
-  IsEmail,
   IsOptional,
   IsPhoneNumber,
-  IsString,
+  IsString
 } from 'class-validator';
 
 export class SalonDto {
@@ -16,7 +15,7 @@ export class SalonDto {
   @IsString()
   readonly cover: string;
 
-  @IsEmail()
+  @IsString()
   readonly address: string;
 
   @IsString()

@@ -5,24 +5,29 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Param,
+  Post,
   Put,
   Request,
   UseGuards
 } from '@nestjs/common';
 
+import { RolesGuard } from '@/auth/role.guard';
+import { Roles } from '@/auth/roles.decorator';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { SalonDto } from './dto/salon.dto';
 import { SalonService } from './salon.service';
 
-@Controller('salon')
+@Controller('salons')
 export class SalonController {
   constructor(
     private salonService: SalonService,
   ) { }
 
   // ======== Update Salon ========
-  @Put('create')
-  @UseGuards(JwtAuthGuard)
+  @Post('')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('vendor')
   @HttpCode(HttpStatus.CREATED)
   async createSalon(
     @Body() data: SalonDto, @Request() req
@@ -33,7 +38,7 @@ export class SalonController {
   }
 
   // ======== Update Salon ========
-  @Put('update/:id')
+  @Put(':id')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.ACCEPTED)
   async updateSalon(
@@ -46,7 +51,7 @@ export class SalonController {
   }
 
   // ======== Get all salon ========
-  @Get('all')
+  @Get('')
   @HttpCode(HttpStatus.OK)
   async getAllSalon(@Request() req) {
     return this.salonService.getAllSalon(req);
@@ -55,8 +60,7 @@ export class SalonController {
   // ======== Get salon info by id ========
   @Get(':id')
   @HttpCode(HttpStatus.OK)
-  async getSalonInfo(@Request() req) {
-    const id = req.params.id;
+  async getSalonInfo(@Param('id') id: string) {
     return this.salonService.getSalonInfo(id);
   }
 

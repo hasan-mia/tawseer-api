@@ -11,19 +11,20 @@ import {
   UseGuards
 } from '@nestjs/common';
 
+import { Roles } from '@/auth/roles.decorator';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/role.guard';
 import { UserDto } from './dto/user.dto';
 import { UserService } from './user.service';
 
-@Controller('user')
+@Controller('users')
 export class UserController {
   constructor(
     private userService: UserService,
   ) { }
 
   // ======== Update User Profile ========
-  @Put('update')
+  @Put('update-me')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.ACCEPTED)
   async updateProfile(
@@ -35,25 +36,25 @@ export class UserController {
   }
 
   // ======== Update user role by admin ========
-  @Put('role/:id')
+  @Put('profile-update/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   @HttpCode(HttpStatus.ACCEPTED)
-  async updateUserRole(@Param() id: string, @Body() data: UserDto) {
-    return this.userService.updateUserRole(id, data);
+  async updateUserInfo(@Param('id') id: string, @Body() data: UserDto) {
+    return this.userService.updateUserInfo(id, data);
   }
 
-  // ======== Get All User by admin ========
-  @Get('all')
+  // ======== Get All User ========
+  @Get('')
   @HttpCode(HttpStatus.OK)
-  async getUserInfo(@Request() req) {
+  async allUser(@Request() req) {
     return this.userService.allUser(req);
   }
 
   // ======== Get user info by ID ========
   @Get(':id')
   @HttpCode(HttpStatus.OK)
-  async getAllUser(@Request() req) {
-    const id = req.params.id;
-    return this.userService.allUser(id);
+  async getUserInfo(@Param('id') id: string) {
+    return this.userService.getUserInfo(id);
   }
 }

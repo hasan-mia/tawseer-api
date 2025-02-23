@@ -1,98 +1,74 @@
 /* eslint-disable prettier/prettier */
-import { Document, Query } from 'mongoose'
+import { Document, Query } from 'mongoose';
 
 interface QueryParams {
-    keyword?: string
+    keyword?: string;
     price?: {
-        gte?: number
-        lte?: number
-    }
+        gte?: number;
+        lte?: number;
+    };
     categoryInfo?: {
-        categoryID?: string
-        category?: string
-    }
-    page?: number
-    limit?: number
+        categoryID?: string;
+        category?: string;
+    };
+    page?: number;
+    limit?: number;
 }
 
 export class ApiFeatures<T extends Document> {
-    query: Query<T[], T>
+    query: Query<T[], T>;
 
-    constructor(
-        query: Query<T[], T>,
-        private queryStr: QueryParams,
-    ) {
-        this.query = query
+    constructor(query: Query<T[], T>, private queryStr: QueryParams) {
+        this.query = query;
     }
 
     search() {
-        const keyword = this.queryStr.keyword
-            ? {
-                name: {
-                    $regex: this.queryStr.keyword,
-                    $options: 'i',
-                },
-            }
-            : {}
-
-        this.query = this.query.find({ ...keyword })
-        return this
+        if (this.queryStr.keyword) {
+            this.query = this.query.find({
+                $or: [
+                    { name: { $regex: this.queryStr.keyword, $options: 'i' } },
+                    { email: { $regex: this.queryStr.keyword, $options: 'i' } },
+                    { username: { $regex: this.queryStr.keyword, $options: 'i' } },
+                    { mobile: { $regex: this.queryStr.keyword, $options: 'i' } },
+                ],
+            });
+        }
+        return this;
     }
 
     filter() {
-        const queryCopy: QueryParams = { ...this.queryStr }
-        const removeFields = ['keyword', 'page', 'limit']
-        removeFields.forEach((key) => delete (queryCopy as any)[key])
+        const queryCopy: QueryParams = { ...this.queryStr };
+        const removeFields = ['keyword', 'page', 'limit'];
+        removeFields.forEach((key) => delete (queryCopy as any)[key]);
 
-        let priceQuery: { price?: { gte?: number; lte?: number } } = {}
-
-        if (queryCopy.price && (queryCopy.price.gte || queryCopy.price.lte)) {
-            const { price } = queryCopy
-            priceQuery = {
-                price: {},
-            }
-            if (price.gte) {
-                priceQuery.price!.gte = price.gte
-            }
-            if (price.lte) {
-                priceQuery.price!.lte = price.lte
-            }
-            delete queryCopy.price
+        // Price Filtering
+        if (queryCopy.price) {
+            const priceFilter: any = {};
+            if (queryCopy.price.gte) priceFilter.$gte = queryCopy.price.gte;
+            if (queryCopy.price.lte) priceFilter.$lte = queryCopy.price.lte;
+            this.query = this.query.find({ price: priceFilter });
         }
 
+        // Category Filtering
         if (queryCopy.categoryInfo) {
-            const categoryQuery: {
-                categoryInfo?: { categoryID?: string; category?: string }
-            } = {}
-
-            if ('categoryID' in queryCopy.categoryInfo) {
-                categoryQuery.categoryInfo = {
-                    categoryID: queryCopy.categoryInfo.categoryID,
-                }
+            const categoryFilter: any = {};
+            if (queryCopy.categoryInfo.categoryID) {
+                categoryFilter['categoryInfo.categoryID'] = queryCopy.categoryInfo.categoryID;
             }
-
-            if ('category' in queryCopy.categoryInfo) {
-                if (!categoryQuery.categoryInfo) {
-                    categoryQuery.categoryInfo = {}
-                }
-                categoryQuery.categoryInfo.category = queryCopy.categoryInfo.category
+            if (queryCopy.categoryInfo.category) {
+                categoryFilter['categoryInfo.category'] = queryCopy.categoryInfo.category;
             }
-
-            delete queryCopy.categoryInfo
-
-            this.query = this.query.find({ ...queryCopy, ...categoryQuery })
-        } else {
-
+            this.query = this.query.find(categoryFilter);
         }
 
-        return this
+        return this;
     }
 
     pagination(resultPerPage: number) {
-        const currentPage = this.queryStr.page ? Number(this.queryStr.page) : 1
-        const skip = resultPerPage * (currentPage - 1)
+        const currentPage = this.queryStr.page ? Number(this.queryStr.page) : 1;
+        const skip = resultPerPage * (currentPage - 1);
 
-        this.query = this.query.limit(resultPerPage).skip(skip)
-        return this
+        this.query = this.query.limit(resultPerPage).skip(skip);
+        return this;
     }
 }
