@@ -109,9 +109,9 @@ export class PostService {
     try {
       const cacheKey = `getAllPost`;
       const cacheData = await this.redisCacheService.get(cacheKey);
-      if (cacheData) {
-        return cacheData;
-      }
+      // if (cacheData) {
+      //   return cacheData;
+      // }
 
       const { keyword, limit, page } = req.query;
 

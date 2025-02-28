@@ -1,6 +1,8 @@
 /* eslint-disable prettier/prettier */
 import {
   Controller,
+  Delete,
+  Get,
   HttpCode,
   HttpStatus,
   Post,
@@ -134,6 +136,35 @@ export class UploadController {
     }
   }
 
+  // ======== Get all photo ========
+  @Get('photos')
+  @HttpCode(HttpStatus.OK)
+  async getAllPhotos() {
+    return this.uploadService.getAllPhotos();
+  }
+
+  // ======== Get all video ========
+  @Get('videos')
+  @HttpCode(HttpStatus.OK)
+  async getAllVideos() {
+    return this.uploadService.getAllVideos();
+  }
+
+  // ======== Delete photos ========
+  @Delete('photos/:id')
+  @HttpCode(HttpStatus.OK)
+  async deletePhotos(@Request() req) {
+    const photoId = req.params.id;
+    return this.uploadService.deletePhotos(photoId);
+  }
+
+  // ======== Delete videos ========
+  @Delete('videos/:id')
+  @HttpCode(HttpStatus.OK)
+  async deleteVideos(@Request() req) {
+    const videoId = req.params.id;
+    return this.uploadService.deleteVideos(videoId);
+  }
   // HLS upload
   // @Post('hls-upload')
   // @HttpCode(HttpStatus.OK)

@@ -15,7 +15,7 @@ export const uniqueID = () => {
 };
 
 export const getPublicIdFromUrl = (url: string): string | null => {
-    const regex = /\/upload\/[^/]+\/([^/]+)\.\w+$/;
+    const regex = /\/upload\/[^/]+\/([^/]+)/;
     const match = url.match(regex);
     return match ? match[1] : null;
 }
