@@ -103,4 +103,13 @@ export class CloudinaryService {
         .run();
     });
   }
+
+  async deleteFile(publicId: string): Promise<UploadApiResponse | UploadApiErrorResponse> {
+    return new Promise((resolve, reject) => {
+      v2.uploader.destroy(publicId, (error, result) => {
+        if (error) return reject(error);
+        resolve(result);
+      });
+    });
+  }
 }

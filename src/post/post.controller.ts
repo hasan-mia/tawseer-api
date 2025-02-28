@@ -2,9 +2,11 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
+  Post,
   Put,
   Request,
   UseGuards
@@ -14,14 +16,14 @@ import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { PostDto } from './dto/post.dto';
 import { PostService } from './post.service';
 
-@Controller('post')
+@Controller('posts')
 export class PostController {
   constructor(
     private salonService: PostService,
   ) { }
 
   // ======== Create Post ========
-  @Put('create')
+  @Post('')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.CREATED)
   async createPost(
@@ -33,7 +35,7 @@ export class PostController {
   }
 
   // ======== Update post ========
-  @Put('update/:id')
+  @Put(':id')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.ACCEPTED)
   async updatePost(
@@ -46,7 +48,7 @@ export class PostController {
   }
 
   // ======== Get all post ========
-  @Get('all')
+  @Get('')
   @HttpCode(HttpStatus.OK)
   async getAllPost(@Request() req) {
     return this.salonService.getAllPost(req);
@@ -61,10 +63,18 @@ export class PostController {
   }
 
   // ======== Get all post by user id ========
-  @Get('all/:id')
+  @Get('user/:id')
   @HttpCode(HttpStatus.OK)
   async getAllPostByUserID(@Request() req) {
     return this.salonService.getAllPostByUserID(req);
+  }
+
+  // ======== Get all post by user id ========
+  @Delete(':id')
+  @HttpCode(HttpStatus.OK)
+  async deletePost(@Request() req) {
+    const postId = req.params.id;
+    return this.salonService.deletePost(postId);
   }
 
 

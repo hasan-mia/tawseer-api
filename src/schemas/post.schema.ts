@@ -19,11 +19,11 @@ export class Post extends Document {
   @Prop({ type: String, required: false })
   text: string;
 
-  @Prop({ type: Types.ObjectId, ref: 'Photo', required: false })
-  photo: Types.ObjectId;
+  @Prop({ type: [Types.ObjectId], ref: 'Photo', required: false })
+  photos: Types.ObjectId[];
 
-  @Prop({ type: Types.ObjectId, ref: 'Video', required: false })
-  video: Types.ObjectId;
+  @Prop({ type: [Types.ObjectId], ref: 'Video', required: false })
+  videos: Types.ObjectId[];
 
   @Prop({ type: Number, default: 0 })
   views: number;

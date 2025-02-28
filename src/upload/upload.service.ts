@@ -34,7 +34,7 @@ export class UploadService {
 
       const finalData = {
         user: id,
-        photos: data,
+        urls: data,
       }
 
       const saveData = await this.photoModel.create(finalData);
@@ -62,7 +62,7 @@ export class UploadService {
 
       const finalData = {
         user: id,
-        videos: data,
+        urls: data,
       }
 
       const saveData = await this.videoModel.create(finalData);

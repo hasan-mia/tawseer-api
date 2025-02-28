@@ -14,7 +14,7 @@ export class Video extends Document {
   user: Types.ObjectId;
 
   @Prop()
-  videos: string[];
+  urls: string[];
 
 }
 

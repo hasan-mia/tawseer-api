@@ -14,7 +14,7 @@ export class Photo extends Document {
   user: Types.ObjectId;
 
   @Prop()
-  photos: string[];
+  urls: string[];
 }
 
 export const PhotoSchema = SchemaFactory.createForClass(Photo);
