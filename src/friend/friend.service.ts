@@ -18,38 +18,36 @@ export class FriendService {
   ) { }
 
   // ======== Send friend request ========
-  async sendFriendRequest(fromUser: string, data: FriendDto) {
-    const { toUser } = data
+  async sendFriendRequest(user: string, friend: string) {
     try {
-
-
       const existingRequest = await this.friendModel.findOne({
-        user: fromUser,
-        toUser,
+        user: user,
+        friend: friend,
         status: 'pending',
-      })
+      });
+
 
       if (existingRequest) {
         throw new NotFoundException('Friend request already sent');
       }
 
       // Check if the users are already friends
-      const fromUserDoc = await this.userModel.findById(fromUser).exec()
-      const toUserDoc = await this.userModel.findById(toUser).exec()
+      const userDoc = await this.userModel.findById(user)
+      const friendDoc = await this.userModel.findById(friend)
 
-      if (!fromUserDoc || !toUserDoc) {
+      if (!userDoc || !friendDoc) {
         throw new NotFoundException('User not found');
       }
 
       if (
-        (fromUserDoc.friends && fromUserDoc.friends.includes(toUser)) ||
-        (toUserDoc.friends && toUserDoc.friends.includes(fromUser))
+        (userDoc.friends && userDoc.friends.includes(friend)) ||
+        (friendDoc.friends && friendDoc.friends.includes(user))
       ) {
         throw new NotFoundException('Users are already friends');
       }
 
       // send friend request
-      const friendRequest = await this.friendModel.create({ user: fromUser, friend: toUser })
+      const friendRequest = await this.friendModel.create({ user: user, friend: friend })
 
       if (!friendRequest) {
         throw new NotFoundException('Failed to send friend request');
@@ -57,15 +55,15 @@ export class FriendService {
 
       // Update following for the user who sent the request
       await this.userModel.findByIdAndUpdate(
-        fromUser,
-        { $addToSet: { followings: toUser } },
+        user,
+        { $addToSet: { followings: friend } },
         { new: true },
       )
 
       // Update followers for the user who received the request
       await this.userModel.findByIdAndUpdate(
-        toUser,
-        { $addToSet: { followers: fromUser } },
+        friend,
+        { $addToSet: { followers: user } },
         { new: true },
       )
 
@@ -82,58 +80,44 @@ export class FriendService {
   }
 
   // ======== Accept friend request ========
-  async acceptFriendRequest(toUser: string, data: FriendDto) {
-    const { friendId } = data
-
+  async acceptFriendRequest(user: string, friend: string) {
     try {
+      // Check if a pending friend request exists
       const existRequest = await this.friendModel.findOne({
-        fromUser: friendId,
+        user: friend,
+        friend: user,
         status: 'pending',
-      })
+      });
 
       if (!existRequest) {
-        throw new NotFoundException('No request found');
+        throw new NotFoundException('No pending friend request found');
       }
 
+      // Update friend request status to 'accepted'
       const friendRequest = await this.friendModel.findByIdAndUpdate(
         existRequest._id,
         { status: 'accepted' },
-        { new: true },
-      )
+        { new: true }
+      );
 
       if (!friendRequest) {
         throw new NotFoundException('Failed to accept friend request');
       }
 
-      // Get the sender of the friend
-      const fromUser = friendRequest.user
+      // Update both users' friends lists
+      await this.userModel.findByIdAndUpdate(user, { $addToSet: { friends: friend } });
+      await this.userModel.findByIdAndUpdate(friend, { $addToSet: { friends: user } });
 
-      // Update the 'friends' field
-      await this.userModel.findByIdAndUpdate(
-        toUser,
-        { $addToSet: { friends: fromUser } },
-        { new: true },
-      )
-
-      // Update the 'friends' field
-      await this.userModel.findByIdAndUpdate(
-        fromUser,
-        { $addToSet: { friends: toUser } },
-        { new: true },
-      )
-
-
-      const result = {
+      return {
         success: true,
-        message: 'Send friend request success',
+        message: 'Friend request accepted successfully',
         data: friendRequest,
       };
-
-      return result;
     } catch (error) {
       throw new InternalServerErrorException(error.message);
     }
   }
+
 
   // ======== Cancel friend request ========
   async cancelFriendRequest(id: string, data: FriendDto) {
@@ -141,11 +125,11 @@ export class FriendService {
     const { friendId } = data
     try {
 
-
       // Find friend requests where fromUser or toUser matches friendId
       const friendRequests = await this.friendModel.find({
-        $or: [{ fromUser: friendId }, { toUser: friendId }],
-      })
+        $or: [{ user: friendId }, { friend: friendId }],
+      });
+
 
       // Update the status of all found friend requests to 'rejected'
       const updatedFriendRequests = await Promise.all(
@@ -213,9 +197,9 @@ export class FriendService {
 
     try {
       const pendingRequests = await this.friendModel.find({
-        friend: id,
-        status: 'pending',
-      }).populate('user')
+        user: id,
+        status: 'pending'
+      }).populate('friend', 'email first_name last_name avatar cover')
 
       const result = {
         success: true,
@@ -234,9 +218,9 @@ export class FriendService {
 
     try {
       const pendingRequests = await this.friendModel.find({
-        user: id,
-        status: 'pending',
-      }).populate('friend')
+        friend: id,
+        status: 'pending'
+      }).populate('friend', 'email first_name last_name avatar cover')
 
       const result = {
         success: true,
@@ -260,14 +244,14 @@ export class FriendService {
         throw new NotFoundException('User not found');
       }
 
-      if (!user.friends) {
+      if (!user.friends || user.friends.length === 0) {
         friendList = []
       }
 
       // Populate each friend ID in the array
       friendList = await Promise.all(
         user.friends.map(async (friendId) => {
-          return await this.userModel.findById(friendId).exec()
+          return await this.userModel.findById(friendId)
         }),
       )
 
@@ -294,14 +278,14 @@ export class FriendService {
         throw new NotFoundException('User not found');
       }
 
-      if (!user.friends) {
+      if (!user.friends || user.friends.length === 0) {
         friendList = []
       }
 
       // Populate each friend ID in the array
       friendList = await Promise.all(
         user.friends.map(async (friendId) => {
-          return await this.userModel.findById(friendId).exec()
+          return await this.userModel.findById(friendId)
         }),
       )
 

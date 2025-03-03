@@ -4,11 +4,11 @@ import { IsOptional, IsString } from 'class-validator';
 export class FriendDto {
   @IsString()
   @IsOptional()
-  readonly fromUser?: string;
+  readonly user?: string;
 
   @IsString()
   @IsOptional()
-  readonly toUser?: string;
+  readonly friend?: string;
 
   @IsString()
   @IsOptional()

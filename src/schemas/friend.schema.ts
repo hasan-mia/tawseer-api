@@ -16,7 +16,7 @@ export class Friend extends Document {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   friend: Types.ObjectId;
 
-  @Prop({ enum: ['pending', 'accepted', 'rejected'] })
+  @Prop({ enum: ['pending', 'accepted', 'rejected'], default: 'pending' })
   status: string;
 }
 
