@@ -2,9 +2,11 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
+  Post,
   Put,
   Request,
   UseGuards,
@@ -14,36 +16,46 @@ import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { ReplyDto } from './dto/reply.dto';
 import { ReplyService } from './reply.service';
 
-@Controller('reply')
+@Controller('replies')
 export class ReplyController {
-  constructor(private reviewService: ReplyService) { }
+  constructor(private replyService: ReplyService) { }
 
   // ======== Create reply ========
-  @Put('create')
+  @Post(':id')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.CREATED)
   async createReply(@Body() data: ReplyDto, @Request() req) {
     const user = req.user;
-    const postId = req.params.id
-    return this.reviewService.createReply(user.id, postId, data);
+    const commentId = req.params.id
+    return this.replyService.createReply(user.id, commentId, data);
   }
 
   // ======== Update reply ========
-  @Put('update/:id')
+  @Put(':id')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.ACCEPTED)
   async updateReply(@Body() data: ReplyDto, @Request() req) {
     const user = req.user;
-    const commentId = req.params.id;
-    return this.reviewService.updateReply(user.id, commentId, data);
+    const replyId = req.params.id;
+    return this.replyService.updateReply(user.id, replyId, data);
+  }
+
+  // ======== Delete reply ========
+  @Delete(':id')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.ACCEPTED)
+  async deleteReply(@Request() req) {
+    const user = req.user;
+    const replyId = req.params.id;
+    return this.replyService.deleteReply(user.id, replyId);
   }
 
 
   // ======== Get reply by comment id ========
-  @Get('salon/:id')
+  @Get(':id')
   @HttpCode(HttpStatus.OK)
   async getReplyByCommentId(@Request() req) {
-    return this.reviewService.getReplyByCommentId(req);
+    return this.replyService.getReplyByCommentId(req);
   }
 
 

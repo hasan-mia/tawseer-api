@@ -7,7 +7,6 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { ApiFeatures } from 'src/helpers/apiFeatures.helper';
 import { Comment } from 'src/schemas/comment.schema';
 import { Post } from 'src/schemas/post.schema';
 import { Reply } from 'src/schemas/reply.schema';
@@ -29,7 +28,7 @@ export class ReplyService {
   ) { }
 
   // ======== Create new reply ========
-  async createReply(userId: string, postId: string, data: ReplyDto) {
+  async createReply(userId: string, commentId: string, data: ReplyDto) {
     try {
       const user = await this.userModel.findById(userId).exec();
 
@@ -37,17 +36,24 @@ export class ReplyService {
         throw new NotFoundException('User not found');
       }
 
+      const comment = await this.commentModel.findById(commentId).exec();
+
+      if (!comment) {
+        throw new NotFoundException("Comment not found")
+      }
+
       const finalData = {
         user: userId,
-        post: postId,
+        post: comment.post,
+        comment: commentId,
         ...data,
       };
 
       const saveData = await this.replyModel.create(finalData);
 
       // remove caching
-      await this.redisCacheService.del(`getAllComment${postId}`);
-      await this.redisCacheService.del(`getAllReply${postId}`);
+      await this.redisCacheService.del(`getAllComment${comment.post}`);
+      await this.redisCacheService.del(`getAllReply${comment.post}`);
 
       const result = {
         success: true,
@@ -62,7 +68,7 @@ export class ReplyService {
   }
 
   // ======== Update reply ========
-  async updateReply(userId: string, commentId: string, data: ReplyDto) {
+  async updateReply(userId: string, replyId: string, data: ReplyDto) {
     try {
       const user = await this.userModel.findById(userId).exec();
 
@@ -71,18 +77,19 @@ export class ReplyService {
       }
 
       const exist = await this.replyModel
-        .findOne({ _id: commentId, user: userId })
+        .findOne({ _id: replyId, user: userId, is_deleted: false })
         .exec();
 
       if (!exist) {
-        throw new NotFoundException('Comment not found');
+        throw new NotFoundException('Reply not found');
       }
 
       const updatedData = { ...exist.toObject(), ...data };
 
       const updatedSaveData = await this.replyModel.findByIdAndUpdate(
         exist._id,
-        updatedData
+        updatedData,
+        { new: true }
       );
 
       // remove caching
@@ -101,63 +108,91 @@ export class ReplyService {
     }
   }
 
+  // ======== Delete reply ========
+  async deleteReply(userId: string, replyId: string) {
+    try {
+      const user = await this.userModel.findById(userId).exec();
+
+      if (!user) {
+        throw new NotFoundException('User not found');
+      }
+
+      const exist = await this.replyModel
+        .findOne({ _id: replyId, user: userId, is_deleted: false })
+        .exec();
+
+      if (!exist) {
+        throw new NotFoundException('Reply not found');
+      }
+
+      const updatedData = { is_deleted: true, };
+
+      const updatedSaveData = await this.replyModel.findByIdAndUpdate(
+        exist._id,
+        updatedData,
+        { new: true }
+      );
+
+      // remove caching
+      await this.redisCacheService.del(`getAllComment${exist.post}`);
+      await this.redisCacheService.del(`getAllReply${exist.post}`);
+
+      const result = {
+        success: true,
+        message: 'Delete successfully',
+        data: updatedSaveData,
+      };
+
+      return result;
+    } catch (error) {
+      throw new InternalServerErrorException(error.message);
+    }
+  }
+
   // ======== Get all reply by comment ID ========
   async getReplyByCommentId(req: any) {
-    const postId = req.params.id;
+    const commentId = req.params.id;
     try {
-      const cacheKey = `getAllReply${postId}`;
+      const cacheKey = `getAllReply${commentId}`;
       const cacheData = await this.redisCacheService.get(cacheKey);
-      if (cacheData) {
-        return cacheData;
-      }
+      // if (cacheData) {
+      //   return cacheData;
+      // }
 
-      const { keyword } = req.query;
+      const { keyword, limit, page } = req.query;
 
       let perPage: number | undefined;
-
-      if (req.query && typeof req.query.limit === 'string') {
-        perPage = parseInt(req.query.limit, 10);
+      if (typeof limit === 'string') {
+        perPage = parseInt(limit, 10);
       }
 
-      // Construct the search criteria
-      const searchCriteria = { post: postId, name: String || null };
+      const searchCriteria: any = { comment: commentId, is_deleted: false };
       if (keyword) {
-        searchCriteria.name = keyword;
+        searchCriteria.text = { $regex: keyword, $options: 'i' };
       }
 
       const count = await this.replyModel.countDocuments(searchCriteria);
 
-      const apiFeature = new ApiFeatures(
-        this.replyModel
-          .find(searchCriteria)
-          .select('-__v')
-          .sort({ createdAt: -1 }),
-        req.query
-      )
-        .search()
-        .filter();
+      const currentPage = page ? parseInt(page as string, 10) : 1;
+      const skip = perPage ? (currentPage - 1) * perPage : 0;
 
-      if (perPage !== undefined) {
-        apiFeature.pagination(perPage);
+      const query = this.replyModel
+        .find(searchCriteria)
+        .select('text image')
+        .sort({ createdAt: -1 })
+        .skip(skip);
+
+      if (perPage) {
+        query.limit(perPage);
       }
 
-      const result = await apiFeature.query;
-      const limit = result.length;
-
-      const currentPage = req.query.page
-        ? parseInt(req.query.page as string, 10)
-        : 1;
-
-      let totalPages: number | undefined;
-
-      if (perPage !== undefined) {
-        totalPages = Math.ceil(count / perPage);
-      }
+      const result = await query.exec();
+      const totalPages = perPage ? Math.ceil(count / perPage) : 1;
 
       let nextPage: number | null = null;
       let nextUrl: string | null = null;
 
-      if (perPage !== undefined && currentPage < totalPages!) {
+      if (perPage && currentPage < totalPages) {
         nextPage = currentPage + 1;
         nextUrl = `${req.originalUrl.split('?')[0]}?limit=${perPage}&page=${nextPage}`;
         if (keyword) {
@@ -171,6 +206,8 @@ export class ReplyService {
         total: count,
         perPage,
         limit,
+        currentPage,
+        totalPages,
         nextPage,
         nextUrl,
       };
@@ -182,4 +219,5 @@ export class ReplyService {
       throw new InternalServerErrorException(error.message);
     }
   }
+
 }

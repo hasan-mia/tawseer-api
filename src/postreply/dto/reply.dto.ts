@@ -1,25 +1,25 @@
 /* eslint-disable prettier/prettier */
-import { IsBoolean, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsOptional, IsString } from 'class-validator';
 
 export class ReplyDto {
-  @IsString()
-  @IsNotEmpty()
-  readonly user: string;
+  // @IsString()
+  // @IsNotEmpty()
+  // readonly user: string;
+
+  // @IsString()
+  // @IsNotEmpty()
+  // readonly post: string;
+
+  // @IsString()
+  // @IsNotEmpty()
+  // readonly comment: string;
 
   @IsString()
-  @IsNotEmpty()
-  readonly post: string;
-
-  @IsString()
-  @IsNotEmpty()
-  readonly comment: string;
-
-  @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   readonly text: string;
 
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   readonly image: string;
 
   @IsBoolean()

@@ -132,7 +132,7 @@ export class CommentService {
 
       const result = {
         success: true,
-        message: 'Update successfully',
+        message: 'Delete successfully',
         data: updatedSaveData,
       };
 
