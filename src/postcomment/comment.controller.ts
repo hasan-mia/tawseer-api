@@ -2,48 +2,60 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
+  Post,
   Put,
   Request,
-  UseGuards,
+  UseGuards
 } from '@nestjs/common';
 
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { CommentService } from './comment.service';
 import { CommentDto } from './dto/comment.dto';
 
-@Controller('comment')
+@Controller('comments')
 export class CommentController {
-  constructor(private reviewService: CommentService) { }
+  constructor(private commnetService: CommentService) { }
 
   // ======== Create comment ========
-  @Put('create')
+  @Post(':id')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.CREATED)
   async createComment(@Body() data: CommentDto, @Request() req) {
     const user = req.user;
     const postId = req.params.id
-    return this.reviewService.createComment(user.id, postId, data);
+    return this.commnetService.createComment(user.id, postId, data);
   }
 
   // ======== Update comment ========
-  @Put('update/:id')
+  @Put(':id')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.ACCEPTED)
   async updateComment(@Body() data: CommentDto, @Request() req) {
     const user = req.user;
     const commentId = req.params.id;
-    return this.reviewService.updateComment(user.id, commentId, data);
+    return this.commnetService.updateComment(user.id, commentId, data);
+  }
+
+  // ======== Delete comment ========
+  @Delete(':id')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.ACCEPTED)
+  async deleteComment(@Request() req) {
+    const user = req.user;
+    const commentId = req.params.id;
+    return this.commnetService.deleteComment(user.id, commentId);
   }
 
 
   // ======== Get comment by post id ========
-  @Get('salon/:id')
+  @Get(':id')
   @HttpCode(HttpStatus.OK)
   async getCommentByPostId(@Request() req) {
-    return this.reviewService.getCommentByPostId(req);
+    return this.commnetService.getCommentByPostId(req);
   }
 
 

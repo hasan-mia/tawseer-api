@@ -7,7 +7,6 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { ApiFeatures } from 'src/helpers/apiFeatures.helper';
 import { Comment } from 'src/schemas/comment.schema';
 import { Post } from 'src/schemas/post.schema';
 import { User } from '../schemas/user.schema';
@@ -32,6 +31,12 @@ export class CommentService {
 
       if (!user) {
         throw new NotFoundException('User not found');
+      }
+
+      const post = await this.postModel.findById(postId).exec();
+
+      if (!post) {
+        throw new NotFoundException('Post not found');
       }
 
       const finalData = {
@@ -78,7 +83,48 @@ export class CommentService {
 
       const updatedSaveData = await this.commentModel.findByIdAndUpdate(
         exist._id,
-        updatedData
+        updatedData,
+        { new: true }
+      );
+
+      // remove caching
+      await this.redisCacheService.del(`getAllComment${exist.post}`);
+
+      const result = {
+        success: true,
+        message: 'Update successfully',
+        data: updatedSaveData,
+      };
+
+      return result;
+    } catch (error) {
+      throw new InternalServerErrorException(error.message);
+    }
+  }
+
+  // ======== Delete comment ========
+  async deleteComment(userId: string, commentId: string) {
+    try {
+      const user = await this.userModel.findById(userId).exec();
+
+      if (!user) {
+        throw new NotFoundException('User not found');
+      }
+
+      const exist = await this.commentModel
+        .findOne({ _id: commentId, user: userId, is_deleted: false })
+        .exec();
+
+      if (!exist) {
+        throw new NotFoundException('Comment not found');
+      }
+
+      const updatedData = { is_deleted: true };
+
+      const updatedSaveData = await this.commentModel.findByIdAndUpdate(
+        exist._id,
+        updatedData,
+        { new: true }
       );
 
       // remove caching
@@ -102,57 +148,44 @@ export class CommentService {
     try {
       const cacheKey = `getAllComment${postId}`;
       const cacheData = await this.redisCacheService.get(cacheKey);
-      if (cacheData) {
-        return cacheData;
-      }
+      // if (cacheData) {
+      //   return cacheData;
+      // }
 
-      const { keyword } = req.query;
+      const { keyword, limit, page } = req.query;
 
       let perPage: number | undefined;
-
-      if (req.query && typeof req.query.limit === 'string') {
-        perPage = parseInt(req.query.limit, 10);
+      if (typeof limit === 'string') {
+        perPage = parseInt(limit, 10);
       }
 
-      // Construct the search criteria
-      const searchCriteria = { post: postId, name: String || null };
+      const searchCriteria: any = { post: postId, is_deleted: false };
       if (keyword) {
-        searchCriteria.name = keyword;
+        searchCriteria.text = { $regex: keyword, $options: 'i' };
       }
 
       const count = await this.commentModel.countDocuments(searchCriteria);
 
-      const apiFeature = new ApiFeatures(
-        this.commentModel
-          .find(searchCriteria)
-          .select('-__v')
-          .sort({ createdAt: -1 }),
-        req.query
-      )
-        .search()
-        .filter();
+      const currentPage = page ? parseInt(page as string, 10) : 1;
+      const skip = perPage ? (currentPage - 1) * perPage : 0;
 
-      if (perPage !== undefined) {
-        apiFeature.pagination(perPage);
+      const query = this.commentModel
+        .find(searchCriteria)
+        .select('text image')
+        .sort({ createdAt: -1 })
+        .skip(skip);
+
+      if (perPage) {
+        query.limit(perPage);
       }
 
-      const result = await apiFeature.query;
-      const limit = result.length;
-
-      const currentPage = req.query.page
-        ? parseInt(req.query.page as string, 10)
-        : 1;
-
-      let totalPages: number | undefined;
-
-      if (perPage !== undefined) {
-        totalPages = Math.ceil(count / perPage);
-      }
+      const result = await query.exec();
+      const totalPages = perPage ? Math.ceil(count / perPage) : 1;
 
       let nextPage: number | null = null;
       let nextUrl: string | null = null;
 
-      if (perPage !== undefined && currentPage < totalPages!) {
+      if (perPage && currentPage < totalPages) {
         nextPage = currentPage + 1;
         nextUrl = `${req.originalUrl.split('?')[0]}?limit=${perPage}&page=${nextPage}`;
         if (keyword) {
@@ -166,6 +199,8 @@ export class CommentService {
         total: count,
         perPage,
         limit,
+        currentPage,
+        totalPages,
         nextPage,
         nextUrl,
       };
@@ -177,4 +212,5 @@ export class CommentService {
       throw new InternalServerErrorException(error.message);
     }
   }
+
 }
