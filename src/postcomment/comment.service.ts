@@ -1,6 +1,7 @@
 /* eslint-disable prettier/prettier */
 import { RedisCacheService } from '@/rediscloud.service';
 import {
+  BadRequestException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -58,6 +59,9 @@ export class CommentService {
 
       return result;
     } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
@@ -98,6 +102,9 @@ export class CommentService {
 
       return result;
     } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
@@ -138,6 +145,9 @@ export class CommentService {
 
       return result;
     } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
@@ -209,6 +219,9 @@ export class CommentService {
 
       return data;
     } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }

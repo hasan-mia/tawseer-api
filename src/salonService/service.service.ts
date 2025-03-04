@@ -1,5 +1,6 @@
 
 import {
+  BadRequestException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -58,6 +59,9 @@ export class ServiceService {
 
       return result;
     } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
@@ -100,6 +104,9 @@ export class ServiceService {
 
       return result;
     } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
@@ -192,6 +199,9 @@ export class ServiceService {
 
       return data;
     } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
@@ -226,6 +236,9 @@ export class ServiceService {
 
       return result;
     } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
@@ -323,6 +336,9 @@ export class ServiceService {
 
       return data;
     } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }

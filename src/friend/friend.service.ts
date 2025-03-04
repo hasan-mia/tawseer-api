@@ -1,11 +1,9 @@
-/* eslint-disable prettier/prettier */
-import { Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { RedisCacheService } from '../rediscloud.service';
 import { Friend } from '../schemas/friend.schema';
 import { User } from '../schemas/user.schema';
-import { FriendDto } from './dto/friend.dto';
 
 @Injectable()
 export class FriendService {
@@ -18,285 +16,379 @@ export class FriendService {
   ) { }
 
   // ======== Send friend request ========
-  async sendFriendRequest(user: string, friend: string) {
+  async sendFriendRequest(userId: string, friendId: string) {
     try {
-      const existingRequest = await this.friendModel.findOne({
-        user: user,
-        friend: friend,
-        status: 'pending',
-      });
-
-
-      if (existingRequest) {
-        throw new NotFoundException('Friend request already sent');
+      // Validate input IDs
+      if (!Types.ObjectId.isValid(userId) || !Types.ObjectId.isValid(friendId)) {
+        throw new BadRequestException('Invalid user or friend ID');
       }
 
-      // Check if the users are already friends
-      const userDoc = await this.userModel.findById(user)
-      const friendDoc = await this.userModel.findById(friend)
+      // Check if user is trying to add themselves as a friend
+      if (userId === friendId) {
+        throw new BadRequestException('Cannot send friend request to yourself');
+      }
+
+      // Find both users to ensure they exist
+      const [userDoc, friendDoc] = await Promise.all([
+        this.userModel.findById(userId),
+        this.userModel.findById(friendId)
+      ]);
 
       if (!userDoc || !friendDoc) {
         throw new NotFoundException('User not found');
       }
 
+      // Check if users are already friends
       if (
-        (userDoc.friends && userDoc.friends.includes(friend)) ||
-        (friendDoc.friends && friendDoc.friends.includes(user))
+        (userDoc.friends && userDoc.friends.includes(friendId)) ||
+        (friendDoc.friends && friendDoc.friends.includes(userId))
       ) {
-        throw new NotFoundException('Users are already friends');
+        throw new BadRequestException('Users are already friends');
       }
 
-      // send friend request
-      const friendRequest = await this.friendModel.create({ user: user, friend: friend })
+      // Check if there's an existing request (in either direction)
+      const existingRequest = await this.friendModel.findOne({
+        $or: [
+          { user: userId, friend: friendId },
+          { user: friendId, friend: userId }
+        ]
+      });
 
-      if (!friendRequest) {
-        throw new NotFoundException('Failed to send friend request');
+      if (existingRequest) {
+        if (existingRequest.status === 'pending') {
+          // If the other user already sent a request, accept it
+          if (existingRequest.user.toString() === friendId) {
+            return this.acceptFriendRequest(userId, friendId);
+          }
+          throw new BadRequestException('Friend request already sent');
+        } else if (existingRequest.status === 'accepted') {
+          throw new BadRequestException('Users are already friends');
+        } else if (existingRequest.status === 'rejected') {
+          // Update the rejected request to pending
+          existingRequest.status = 'pending';
+          await existingRequest.save();
+
+          // Update following relationship
+          await Promise.all([
+            this.userModel.findByIdAndUpdate(
+              userId,
+              { $addToSet: { followings: friendId } },
+              { new: true }
+            ),
+            this.userModel.findByIdAndUpdate(
+              friendId,
+              { $addToSet: { followers: userId } },
+              { new: true }
+            )
+          ]);
+
+          return {
+            success: true,
+            message: 'Friend request sent successfully',
+            data: existingRequest
+          };
+        }
       }
 
-      // Update following for the user who sent the request
-      await this.userModel.findByIdAndUpdate(
-        user,
-        { $addToSet: { followings: friend } },
-        { new: true },
-      )
+      // Create new friend request
+      const friendRequest = await this.friendModel.create({
+        user: userId,
+        friend: friendId
+      });
 
-      // Update followers for the user who received the request
-      await this.userModel.findByIdAndUpdate(
-        friend,
-        { $addToSet: { followers: user } },
-        { new: true },
-      )
+      // Update following relationships
+      await Promise.all([
+        this.userModel.findByIdAndUpdate(
+          userId,
+          { $addToSet: { followings: friendId } },
+          { new: true }
+        ),
+        this.userModel.findByIdAndUpdate(
+          friendId,
+          { $addToSet: { followers: userId } },
+          { new: true }
+        )
+      ]);
 
-      const result = {
+      return {
         success: true,
-        message: 'Send friend request success',
-        data: friendRequest,
+        message: 'Friend request sent successfully',
+        data: friendRequest
       };
-
-      return result;
     } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
 
   // ======== Accept friend request ========
-  async acceptFriendRequest(user: string, friend: string) {
+  async acceptFriendRequest(userId: string, friendId: string) {
     try {
+      // Validate input IDs
+      if (!Types.ObjectId.isValid(userId) || !Types.ObjectId.isValid(friendId)) {
+        throw new BadRequestException('Invalid user or friend ID');
+      }
+
       // Check if a pending friend request exists
-      const existRequest = await this.friendModel.findOne({
-        user: friend,
-        friend: user,
-        status: 'pending',
+      const existingRequest = await this.friendModel.findOne({
+        user: userId,
+        friend: friendId,
+        status: 'pending'
       });
 
-      if (!existRequest) {
+      if (!existingRequest) {
         throw new NotFoundException('No pending friend request found');
       }
 
       // Update friend request status to 'accepted'
       const friendRequest = await this.friendModel.findByIdAndUpdate(
-        existRequest._id,
+        existingRequest._id,
         { status: 'accepted' },
         { new: true }
       );
 
-      if (!friendRequest) {
-        throw new NotFoundException('Failed to accept friend request');
-      }
-
-      // Update both users' friends lists
-      await this.userModel.findByIdAndUpdate(user, { $addToSet: { friends: friend } });
-      await this.userModel.findByIdAndUpdate(friend, { $addToSet: { friends: user } });
+      // Update both users' friends lists and maintain following/follower relationship
+      await Promise.all([
+        this.userModel.findByIdAndUpdate(
+          userId,
+          {
+            $addToSet: {
+              friends: friendId,
+              followings: friendId
+            }
+          }
+        ),
+        this.userModel.findByIdAndUpdate(
+          friendId,
+          {
+            $addToSet: {
+              friends: userId,
+              followings: userId
+            }
+          }
+        )
+      ]);
 
       return {
         success: true,
         message: 'Friend request accepted successfully',
-        data: friendRequest,
+        data: friendRequest
       };
     } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
 
-
-  // ======== Cancel friend request ========
-  async cancelFriendRequest(id: string, data: FriendDto) {
-
-    const { friendId } = data
+  // ======== Cancel friend request or unfriend ========
+  async cancelFriendRequest(userId: string, friendId: string) {
     try {
+      if (!Types.ObjectId.isValid(userId) || !Types.ObjectId.isValid(friendId)) {
+        throw new BadRequestException('Invalid user or friend ID');
+      }
 
-      // Find friend requests where fromUser or toUser matches friendId
-      const friendRequests = await this.friendModel.find({
-        $or: [{ user: friendId }, { friend: friendId }],
+      // Find friend requests between these users
+      const deletedRequests = await this.friendModel.deleteMany({
+        $or: [
+          { user: userId, friend: friendId },
+          { user: friendId, friend: userId }
+        ]
       });
 
+      if (deletedRequests.deletedCount === 0) {
+        throw new NotFoundException('No friendship or request found between these users');
+      }
 
-      // Update the status of all found friend requests to 'rejected'
-      const updatedFriendRequests = await Promise.all(
-        friendRequests.map(async (friendRequest) => {
-          friendRequest.status = 'rejected'
-          return friendRequest.save()
-        }),
-      )
-
-      // ==============Unfriend===================
-      // Update the 'user' field
-      await this.userModel.findByIdAndUpdate(
-        id,
-        { $pull: { friends: friendId } },
-        { new: true },
-      )
-
-      // Update the 'friends' field
-      await this.userModel.findByIdAndUpdate(
-        friendId,
-        { $pull: { friends: id } },
-        { new: true },
-      )
-
-      // ==============Un follower & UnFollow===================
-      // Update the 'followings' field
-      await this.userModel.findByIdAndUpdate(
-        friendId,
-        { $pull: { followings: id } },
-        { new: true },
-      )
-      await this.userModel.findByIdAndUpdate(
-        id,
-        { $pull: { followings: friendId } },
-        { new: true },
-      )
-
-      // Update the 'followers' field
-      await this.userModel.findByIdAndUpdate(
-        friendId,
-        { $pull: { followers: id } },
-        { new: true },
-      )
-      await this.userModel.findByIdAndUpdate(
-        id,
-        { $pull: { followers: friendId } },
-        { new: true },
-      )
-
-
-      const result = {
+      return {
         success: true,
-        message: 'Send friend request success',
-        data: updatedFriendRequests,
+        message: 'Friend request canceled successfully',
+        data: { deletedCount: deletedRequests.deletedCount }
       };
 
-      return result;
+      // // Update the status of all found friend requests to 'rejected'
+      // const updatedFriendRequests = await Promise.all(
+      //   friendRequests.map(async (request) => {
+      //     request.status = 'rejected';
+      //     return request.save();
+      //   })
+      // );
+
+      // // Remove from friends lists
+      // await Promise.all([
+      //   this.userModel.findByIdAndUpdate(
+      //     userId,
+      //     { $pull: { friends: friendId } },
+      //     { new: true }
+      //   ),
+      //   this.userModel.findByIdAndUpdate(
+      //     friendId,
+      //     { $pull: { friends: userId } },
+      //     { new: true }
+      //   )
+      // ]);
+
+      // // Remove from followers/followings lists
+      // await Promise.all([
+      //   this.userModel.findByIdAndUpdate(
+      //     userId,
+      //     {
+      //       $pull: {
+      //         followers: friendId,
+      //         followings: friendId
+      //       }
+      //     },
+      //     { new: true }
+      //   ),
+      //   this.userModel.findByIdAndUpdate(
+      //     friendId,
+      //     {
+      //       $pull: {
+      //         followers: userId,
+      //         followings: userId
+      //       }
+      //     },
+      //     { new: true }
+      //   )
+      // ]);
+
+      // return {
+      //   success: true,
+      //   message: 'Friend request canceled or friendship removed successfully',
+      //   data: friendRequests
+      // };
     } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
 
-  // ======== Get pending friend request ========
-  async getPendingFriendRequests(id: string) {
-
+  // ======== Get pending friend requests sent by the user ========
+  async getPendingFriendRequests(userId: string) {
     try {
+      // Validate input ID
+      if (!Types.ObjectId.isValid(userId)) {
+        throw new BadRequestException('Invalid user ID');
+      }
+
       const pendingRequests = await this.friendModel.find({
-        user: id,
+        friend: userId,
         status: 'pending'
-      }).populate('friend', 'email first_name last_name avatar cover')
+      }).populate('user', 'email first_name last_name avatar cover')
+        .populate('friend', 'email first_name last_name avatar cover');
 
-      const result = {
+      return {
         success: true,
-        message: 'Found pending friend request success',
-        data: pendingRequests,
+        message: 'Retrieved pending friend requests successfully',
+        data: pendingRequests
       };
-
-      return result;
     } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
 
-  // ======== Get sending friend request ========
-  async getSendingFriendRequests(id: string) {
-
+  // ======== Get sent friend requests received by the user ========
+  async getSendingFriendRequests(userId: string) {
     try {
+      if (!Types.ObjectId.isValid(userId)) {
+        throw new BadRequestException('Invalid user ID');
+      }
+
       const pendingRequests = await this.friendModel.find({
-        friend: id,
+        user: userId,
         status: 'pending'
-      }).populate('friend', 'email first_name last_name avatar cover')
+      }).populate('user', 'email first_name last_name avatar cover')
+        .populate('friend', 'email first_name last_name avatar cover');
 
-      const result = {
+      return {
         success: true,
-        message: 'Found pending friend request success',
-        data: pendingRequests,
+        message: 'Retrieved incoming friend requests successfully',
+        data: pendingRequests
       };
-
-      return result;
     } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
 
   // ======== Get my friend list ========
-  async getMyFriendList(id: string) {
-    let friendList: any;
+  async getMyFriendList(userId: string) {
     try {
-      const user = await this.userModel.findById(id).exec()
+      if (!Types.ObjectId.isValid(userId)) {
+        throw new BadRequestException('Invalid user ID');
+      }
+
+      // Use cache if available
+      const cacheKey = `friend_list_${userId}`;
+      const cachedData = await this.redisCacheService.get(cacheKey);
+
+      if (cachedData) {
+        return {
+          success: true,
+          message: 'Retrieved friend list from cache',
+          data: JSON.parse(cachedData)
+        };
+      }
+
+      const user = await this.userModel.findById(userId).exec();
 
       if (!user) {
         throw new NotFoundException('User not found');
       }
 
       if (!user.friends || user.friends.length === 0) {
-        friendList = []
+        return {
+          success: true,
+          message: 'User has no friends',
+          data: []
+        };
       }
 
-      // Populate each friend ID in the array
-      friendList = await Promise.all(
-        user.friends.map(async (friendId) => {
-          return await this.userModel.findById(friendId)
-        }),
-      )
+      // Populate friends data with relevant fields only
+      const friendList = await this.userModel.find(
+        { _id: { $in: user.friends } },
+        'email first_name last_name avatar cover bio'
+      );
 
-      const result = {
+      // Cache the result
+      await this.redisCacheService.set(
+        cacheKey,
+        JSON.stringify(friendList),
+        60 * 15 // 15 minutes
+      );
+
+      return {
         success: true,
-        message: 'Found friend request success',
-        data: friendList,
+        message: 'Retrieved friend list successfully',
+        data: friendList
       };
-
-      return result;
     } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
 
   // ======== Get user friend list by ID ========
-  async getFriendListByID(id: string) {
-    let friendList: any;
+  async getFriendListByID(userId: string) {
     try {
-
-      const user = await this.userModel.findById(id).exec()
-
-      if (!user) {
-        throw new NotFoundException('User not found');
-      }
-
-      if (!user.friends || user.friends.length === 0) {
-        friendList = []
-      }
-
-      // Populate each friend ID in the array
-      friendList = await Promise.all(
-        user.friends.map(async (friendId) => {
-          return await this.userModel.findById(friendId)
-        }),
-      )
-
-      const result = {
-        success: true,
-        message: 'Found friend request success',
-        data: friendList,
-      };
-
-      return result;
+      // Reuse the same implementation as getMyFriendList
+      return this.getMyFriendList(userId);
     } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }

@@ -1,5 +1,5 @@
 /* eslint-disable prettier/prettier */
-import { Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { RedisCacheService } from '../rediscloud.service';
@@ -42,6 +42,9 @@ export class UserService {
 
       return result;
     } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
@@ -73,6 +76,9 @@ export class UserService {
       return result
 
     } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
@@ -105,6 +111,9 @@ export class UserService {
       return result;
 
     } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
@@ -200,6 +209,9 @@ export class UserService {
 
       return data;
     } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
@@ -233,6 +245,9 @@ export class UserService {
 
       return result;
     } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }

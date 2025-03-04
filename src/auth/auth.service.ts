@@ -1,6 +1,7 @@
 import { generateRandomFourDigitOtp } from '@/helpers/otp.helper';
 import { RedisCacheService } from '@/rediscloud.service';
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   InternalServerErrorException,
@@ -64,6 +65,9 @@ export class AuthService {
 
       return result;
     } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
@@ -97,6 +101,9 @@ export class AuthService {
 
       return result;
     } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
@@ -136,6 +143,9 @@ export class AuthService {
 
       return result;
     } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
@@ -188,6 +198,9 @@ export class AuthService {
 
       return { success: true, data: user };
     } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
       throw new Error(`Failed to get vehicle: ${error.message}`);
     }
   }
