@@ -1,6 +1,7 @@
 /* eslint-disable prettier/prettier */
 import { CloudinaryService } from '@/cloudinary/cloudinary.service';
 import { getPublicIdFromUrl } from '@/helpers/uniqID.helper';
+import { Friend } from '@/schemas/friend.schema';
 import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -32,6 +33,8 @@ export class PostService {
     private userModel: Model<User>,
     @InjectModel(Post.name)
     private postModel: Model<Post>,
+    @InjectModel(Friend.name)
+    private friendModel: Model<Friend>,
     private readonly redisCacheService: RedisCacheService,
     private readonly cloudinaryService: CloudinaryService,
   ) { }
@@ -169,7 +172,6 @@ export class PostService {
         data: result || [],
         total: count,
         perPage,
-        limit,
         currentPage,
         totalPages,
         nextPage,
@@ -385,5 +387,138 @@ export class PostService {
     }
   }
 
+  // ======== Get post of user firend and following user ========
+  async getFriendsAndFollowingPosts(req: any) {
+    const userId = req.user.id
+
+    let targetUserId = userId
+
+    if (userId === "friends-following" && req.user) {
+      targetUserId = req.user._id
+    } else if (userId === "friends-following") {
+      throw new BadRequestException("User authentication required to view friends and following posts")
+    }
+
+    try {
+      const cacheKey = `getFriendsAndFollowingPosts${targetUserId}`
+      const cacheData = await this.redisCacheService.get(cacheKey)
+      // Uncomment if you want to use caching
+      // if (cacheData) {
+      //   return cacheData;
+      // }
+
+      const { keyword, limit, page } = req.query
+
+      let perPage: number | undefined
+      let currentPage: number | undefined = 1
+
+      if (typeof limit === "string") {
+        perPage = Number.parseInt(limit, 10)
+      }
+      if (typeof page === "string") {
+        currentPage = Number.parseInt(page, 10)
+      }
+
+      // Get the user's accepted friends
+      const friendships = await this.friendModel
+        .find({
+          user: targetUserId,
+          status: "accepted",
+        })
+        .select("friend")
+
+      const friendIds = friendships.map((friendship) => friendship.friend)
+
+      // Get the user's followings
+      const user = await this.userModel.findById(targetUserId).select("followings")
+      const followingIds = user?.followings || []
+
+      // Combine friend and following IDs (removing duplicates)
+      const combinedIds = [...new Set([...friendIds, ...followingIds])]
+
+      // If user has no friends or followings, return empty result
+      if (combinedIds.length === 0) {
+        return {
+          success: true,
+          data: [],
+          total: 0,
+          perPage,
+          limit: 0,
+          currentPage,
+          totalPages: 0,
+          nextPage: null,
+          nextUrl: null,
+        }
+      }
+
+      // Build search criteria
+      const searchCriteria: any = {
+        user: { $in: combinedIds },
+        is_deleted: false,
+      }
+
+      if (keyword) {
+        searchCriteria.$or = [{ text: { $regex: keyword, $options: "i" } }]
+      }
+
+      // Count total posts
+      const count = await this.postModel.countDocuments(searchCriteria)
+
+      // Build the query for retrieving posts
+      let query = this.postModel
+        .find(searchCriteria)
+        .populate("user", "first_name last_name email mobile avatar cover")
+        .populate("photos", "urls")
+        .populate("videos", "urls")
+        .select("-__v")
+        .sort({ createdAt: -1 })
+
+      if (perPage) {
+        const skip = (currentPage - 1) * perPage
+        query = query.skip(skip).limit(perPage)
+      }
+
+      const result = await query.exec()
+
+      // Calculate totalPages if perPage is specified
+      let totalPages: number | undefined
+      if (perPage) {
+        totalPages = Math.ceil(count / perPage)
+      }
+
+      // Prepare pagination details
+      let nextPage: number | null = null
+      let nextUrl: string | null = null
+
+      if (perPage && currentPage < totalPages!) {
+        nextPage = currentPage + 1
+        nextUrl = `${req.originalUrl.split("?")[0]}?limit=${perPage}&page=${nextPage}`
+        if (keyword) {
+          nextUrl += `&keyword=${keyword}`
+        }
+      }
+
+      const data = {
+        success: true,
+        data: result || [],
+        total: count,
+        perPage,
+        currentPage,
+        totalPages,
+        nextPage,
+        nextUrl,
+      }
+
+      // Cache the result for 30 minutes
+      await this.redisCacheService.set(cacheKey, data, 1800)
+
+      return data
+    } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error
+      }
+      throw new InternalServerErrorException(error.message)
+    }
+  }
 
 }

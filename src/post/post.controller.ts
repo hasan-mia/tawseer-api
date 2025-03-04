@@ -1,4 +1,3 @@
-/* eslint-disable prettier/prettier */
 import {
   Body,
   Controller,
@@ -19,7 +18,7 @@ import { PostService } from './post.service';
 @Controller('posts')
 export class PostController {
   constructor(
-    private salonService: PostService,
+    private postService: PostService,
   ) { }
 
   // ======== Create Post ========
@@ -30,7 +29,7 @@ export class PostController {
     @Body() data: PostDto, @Request() req
   ) {
     const user = req.user;
-    return this.salonService.createPost(user.id, data);
+    return this.postService.createPost(user.id, data);
 
   }
 
@@ -43,15 +42,15 @@ export class PostController {
   ) {
     const user = req.user;
     const postId = req.params.id;
-    return this.salonService.updatePost(user.id, postId, data);
+    return this.postService.updatePost(user.id, postId, data);
 
   }
 
   // ======== Get all post ========
-  @Get('')
+  @Get('all')
   @HttpCode(HttpStatus.OK)
   async getAllPost(@Request() req) {
-    return this.salonService.getAllPost(req);
+    return this.postService.getAllPost(req);
   }
 
   // ======== Get post details by id ========
@@ -59,14 +58,14 @@ export class PostController {
   @HttpCode(HttpStatus.OK)
   async getPostDetails(@Request() req) {
     const id = req.params.id;
-    return this.salonService.getPostDetails(id);
+    return this.postService.getPostDetails(id);
   }
 
   // ======== Get all post by user id ========
   @Get('user/:id')
   @HttpCode(HttpStatus.OK)
   async getAllPostByUserID(@Request() req) {
-    return this.salonService.getAllPostByUserID(req);
+    return this.postService.getAllPostByUserID(req);
   }
 
   // ======== Get all post by user id ========
@@ -74,7 +73,15 @@ export class PostController {
   @HttpCode(HttpStatus.OK)
   async deletePost(@Request() req) {
     const postId = req.params.id;
-    return this.salonService.deletePost(postId);
+    return this.postService.deletePost(postId);
+  }
+
+  // ======== Get post of user firend and following user ========
+  @Get('')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async getFriendsAndFollowingPosts(@Request() req) {
+    return this.postService.getFriendsAndFollowingPosts(req);
   }
 
 
