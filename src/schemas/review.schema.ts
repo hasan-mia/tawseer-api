@@ -13,14 +13,17 @@ export class Review extends Document {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   user: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'Salon', required: true })
-  salon: Types.ObjectId;
+  @Prop({ type: Types.ObjectId, ref: 'Vendor', required: false })
+  vendor: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'Service', required: true })
+  @Prop({ type: Types.ObjectId, ref: 'Service', required: false })
   service: Types.ObjectId;
 
+  @Prop({ type: Types.ObjectId, ref: 'Product', required: false })
+  product: Types.ObjectId;
+
   @Prop({
-    enum: ['salon', 'service'],
+    enum: ['vendor', 'product', 'service'],
     required: true,
     default: 'service',
   })

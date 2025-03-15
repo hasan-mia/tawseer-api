@@ -1,10 +1,10 @@
 /* eslint-disable prettier/prettier */
 import { RedisCacheService } from '@/rediscloud.service';
+import { AppointmentSchema } from '@/schemas/appointment.schema';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { CloudinaryService } from 'src/cloudinary/cloudinary.service';
-import { AppointmentSchema } from 'src/schemas/salonAppointment.schema';
-import { ServiceSchema } from 'src/schemas/salonService.schema';
+import { ServiceSchema } from 'src/schemas/service.schema';
 import { UserSchema } from '../schemas/user.schema';
 import { AppointmentController } from './appointment.controller';
 import { AppointmentService } from './appointment.service';

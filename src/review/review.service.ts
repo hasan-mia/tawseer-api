@@ -7,9 +7,9 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { ApiFeatures } from 'src/helpers/apiFeatures.helper';
+import { Review } from 'src/schemas/review.schema';
 import { Salon } from 'src/schemas/salon.schema';
-import { Review } from 'src/schemas/salonReview.schema';
-import { Service } from 'src/schemas/salonService.schema';
+import { Service } from 'src/schemas/service.schema';
 import { RedisCacheService } from '../rediscloud.service';
 import { User } from '../schemas/user.schema';
 import { ReviewDto } from './dto/review.dto';
@@ -86,7 +86,7 @@ export class ReviewService {
 
       // remove caching
       await this.redisCacheService.del(`getAllServiceReview${exist.service}`);
-      await this.redisCacheService.del(`getAllSalonReview${exist.salon}`);
+      await this.redisCacheService.del(`getAllSalonReview${exist.vendor}`);
 
 
       const result = {

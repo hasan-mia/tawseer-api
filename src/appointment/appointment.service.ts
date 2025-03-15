@@ -1,4 +1,5 @@
 /* eslint-disable prettier/prettier */
+import { Appointment } from '@/schemas/appointment.schema';
 import {
   Injectable,
   InternalServerErrorException,
@@ -7,8 +8,7 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { ApiFeatures } from 'src/helpers/apiFeatures.helper';
-import { Appointment } from 'src/schemas/salonAppointment.schema';
-import { Service } from 'src/schemas/salonService.schema';
+import { Service } from 'src/schemas/service.schema';
 import { RedisCacheService } from '../rediscloud.service';
 import { User } from '../schemas/user.schema';
 import { AppointmentDto } from './dto/appointment.dto';
@@ -44,7 +44,6 @@ export class AppointmentService {
         user: userId,
         service: service._id,
         vendor: service.vendor,
-        salon: service.salon,
         ...data,
       };
 
@@ -52,8 +51,8 @@ export class AppointmentService {
 
       // remove caching
       await this.redisCacheService.del('getAllAppointment');
-      await this.redisCacheService.del(`getAllSalonAppointment${service.salon}`);
-      await this.redisCacheService.del(`getConfirmSalonAppointment${service.salon}`);
+      await this.redisCacheService.del(`getAllSalonAppointment${service.vendor}`);
+      await this.redisCacheService.del(`getConfirmSalonAppointment${service.vendor}`);
       await this.redisCacheService.del(`getAllUserAppointment${userId}`);
 
       const result = {

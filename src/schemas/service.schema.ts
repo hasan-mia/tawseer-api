@@ -11,10 +11,10 @@ export class Service extends Document {
   uuid: string;
 
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
-  vendor: Types.ObjectId;
+  user: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'Salon', required: true })
-  salon: Types.ObjectId;
+  @Prop({ type: Types.ObjectId, ref: 'vendor', required: true })
+  vendor: Types.ObjectId;
 
   @Prop({ required: true })
   name: string

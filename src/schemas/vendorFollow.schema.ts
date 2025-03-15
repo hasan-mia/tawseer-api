@@ -6,15 +6,15 @@ import { v4 as uuidv4 } from 'uuid';
 @Schema({
   timestamps: true,
 })
-export class SalonFollow extends Document {
+export class VendorFollow extends Document {
   @Prop({ default: () => uuidv4() })
   uuid: string;
 
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   user: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'Salon', required: true })
-  salon: Types.ObjectId;
+  @Prop({ type: Types.ObjectId, ref: 'Vendor', required: true })
+  vendor: Types.ObjectId;
 }
 
-export const SalonFollowSchema = SchemaFactory.createForClass(SalonFollow);
+export const VendorFollowSchema = SchemaFactory.createForClass(VendorFollow);

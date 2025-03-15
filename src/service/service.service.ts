@@ -8,7 +8,7 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Salon } from 'src/schemas/salon.schema';
-import { Service } from 'src/schemas/salonService.schema';
+import { Service } from 'src/schemas/service.schema';
 import { RedisCacheService } from '../rediscloud.service';
 import { User } from '../schemas/user.schema';
 import { ServiceDto } from './dto/service.dto';
