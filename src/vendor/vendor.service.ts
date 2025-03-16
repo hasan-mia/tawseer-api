@@ -2,7 +2,6 @@ import { RedisCacheService } from '@/rediscloud.service';
 import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import slugify from 'slugify';
 import { Vendor } from 'src/schemas/vendor.schema';
 import { User } from '../schemas/user.schema';
 import { updateVendor } from './dto/updateVendor.dto';
@@ -33,12 +32,12 @@ export class VendorService {
         throw new BadRequestException('Vendor profile already exists');
       }
 
-      const slug = slugify(data.name, { lower: true, strict: true });
+      // const slug = slugify(data.name, { lower: true, strict: true });
 
       const finalData = {
         vendor: id,
         ...data,
-        slug,
+        // slug,
       };
 
       const saveData = await this.vendorModel.create(finalData);
@@ -228,7 +227,7 @@ export class VendorService {
 
       const result = {
         success: true,
-        message: 'Vendor found successfully',
+        message: 'Vendor deleted successfully',
       };
 
       return result;
