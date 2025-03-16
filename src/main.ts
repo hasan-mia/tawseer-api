@@ -10,7 +10,7 @@ dotenv.config();
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  app.setGlobalPrefix('/salon');
+  app.setGlobalPrefix('/tawseer/v1');
   app.enableCors({
     origin: '*',
     credentials: true,
