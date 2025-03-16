@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
+import slugify from 'slugify';
 import { v4 as uuidv4 } from 'uuid';
 
 @Schema({
@@ -14,6 +15,13 @@ export class Vendor extends Document {
 
     @Prop({ required: true })
     name: string;
+
+    @Prop({
+        required: true,
+        unique: true,
+        set: (name: string) => slugify(name, { lower: true, strict: true }),
+    })
+    slug: string;
 
     @Prop({ required: true })
     bio: string;
@@ -59,4 +67,14 @@ export class Vendor extends Document {
 }
 
 export const VendorSchema = SchemaFactory.createForClass(Vendor);
+
+VendorSchema.pre<Vendor>('save', function (next) {
+    if (this.isModified('name')) {
+        this.slug = slugify(this.name, { lower: true, strict: true });
+    }
+    next();
+});
+
+VendorSchema.index({ slug: 1 }, { unique: true });
+
 VendorSchema.index({ location: '2dsphere' });

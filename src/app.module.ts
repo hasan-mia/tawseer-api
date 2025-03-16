@@ -22,6 +22,7 @@ import { ServiceModule } from './service/service.module';
 import { SocketModule } from './socket/socket.module';
 import { UploadModule } from './upload/upload.module';
 import { UserModule } from './user/user.module';
+import { VendorModule } from './vendor/vendor.module';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { UserModule } from './user/user.module';
     PostModule,
     CommentModule,
     ReplyModule,
+    VendorModule,
   ],
   controllers: [AppController],
   providers: [AppService, RedisCacheService],
