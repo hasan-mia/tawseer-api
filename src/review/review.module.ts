@@ -1,12 +1,13 @@
 /* eslint-disable prettier/prettier */
+import { CloudinaryService } from '@/cloudinary/cloudinary.service';
 import { RedisCacheService } from '@/rediscloud.service';
+import { ProductSchema } from '@/schemas/product.schema';
+import { ReviewSchema } from '@/schemas/review.schema';
+import { ServiceSchema } from '@/schemas/service.schema';
+import { UserSchema } from '@/schemas/user.schema';
+import { VendorSchema } from '@/schemas/vendor.schema';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { CloudinaryService } from 'src/cloudinary/cloudinary.service';
-import { ReviewSchema } from 'src/schemas/review.schema';
-import { SalonSchema } from 'src/schemas/salon.schema';
-import { ServiceSchema } from 'src/schemas/service.schema';
-import { UserSchema } from '../schemas/user.schema';
 import { ReviewController } from './review.controller';
 import { ReviewService } from './review.service';
 
@@ -15,8 +16,9 @@ import { ReviewService } from './review.service';
     MongooseModule.forFeature([
       { name: 'User', schema: UserSchema },
       { name: 'Service', schema: ServiceSchema },
-      { name: 'Salon', schema: SalonSchema },
+      { name: 'Vendor', schema: VendorSchema },
       { name: 'Review', schema: ReviewSchema },
+      { name: 'Product', schema: ProductSchema },
     ]),
   ],
   controllers: [ReviewController],

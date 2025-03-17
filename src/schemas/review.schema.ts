@@ -29,7 +29,7 @@ export class Review extends Document {
   })
   type: string;
 
-  @Prop({ type: Boolean, required: true })
+  @Prop({ type: Number, required: true })
   rating: number;
 
   @Prop({ type: String, required: true })

@@ -1,23 +1,47 @@
-/* eslint-disable prettier/prettier */
-import { IsNumber, IsOptional, IsString } from 'class-validator';
-
+import { IsEnum, IsMongoId, IsNumber, IsOptional, IsString } from 'class-validator';
 export class ReviewDto {
-
-  @IsString()
+  @IsMongoId()
   @IsOptional()
   readonly user?: string;
 
-  @IsString()
+  @IsMongoId()
   @IsOptional()
-  readonly salon?: string;
+  readonly vendor?: string;
 
-  @IsString()
+  @IsMongoId()
   @IsOptional()
   readonly service?: string;
 
-  @IsString()
+  @IsMongoId()
   @IsOptional()
-  readonly type?: string;
+  readonly product?: string;
+
+  @IsEnum(['vendor', 'product', 'service'])
+  readonly type: string;
+
+  @IsNumber()
+  readonly rating: number;
+
+  @IsString()
+  readonly message: string;
+}
+
+export class ReviewUpdateDto {
+  @IsMongoId()
+  @IsOptional()
+  readonly user?: string;
+
+  @IsMongoId()
+  @IsOptional()
+  readonly vendor?: string;
+
+  @IsMongoId()
+  @IsOptional()
+  readonly service?: string;
+
+  @IsMongoId()
+  @IsOptional()
+  readonly product?: string;
 
   @IsNumber()
   @IsOptional()
@@ -26,5 +50,4 @@ export class ReviewDto {
   @IsString()
   @IsOptional()
   readonly message?: string;
-
 }

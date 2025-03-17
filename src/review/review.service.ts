@@ -1,266 +1,152 @@
 /* eslint-disable prettier/prettier */
 import {
+  BadRequestException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { ApiFeatures } from 'src/helpers/apiFeatures.helper';
-import { Review } from 'src/schemas/review.schema';
-import { Salon } from 'src/schemas/salon.schema';
-import { Service } from 'src/schemas/service.schema';
 import { RedisCacheService } from '../rediscloud.service';
+import { Product } from '../schemas/product.schema';
+import { Review } from '../schemas/review.schema';
+import { Service } from '../schemas/service.schema';
 import { User } from '../schemas/user.schema';
-import { ReviewDto } from './dto/review.dto';
+import { Vendor } from '../schemas/vendor.schema';
+import { ReviewDto, ReviewUpdateDto } from './dto/review.dto';
 
 @Injectable()
 export class ReviewService {
   constructor(
-    @InjectModel(User.name)
-    private userModel: Model<User>,
-    @InjectModel(Service.name)
-    private serviceModel: Model<Service>,
-    @InjectModel(Salon.name)
-    private salonModel: Model<Salon>,
-    @InjectModel(Review.name)
-    private reviewModel: Model<Review>,
+    @InjectModel(User.name) private userModel: Model<User>,
+    @InjectModel(Service.name) private serviceModel: Model<Service>,
+    @InjectModel(Vendor.name) private vendorModel: Model<Vendor>,
+    @InjectModel(Product.name) private productModel: Model<Product>,
+    @InjectModel(Review.name) private reviewModel: Model<Review>,
     private readonly redisCacheService: RedisCacheService
   ) { }
 
   // ======== Create new review ========
-  async createReview(id: string, data: ReviewDto) {
+  async createReview(userId: string, data: ReviewDto) {
     try {
-      const user = await this.userModel.findById(id).exec();
+      const user = await this.userModel.findById(userId).exec();
+      if (!user) throw new NotFoundException('User not found');
 
-      if (!user) {
-        throw new NotFoundException('User not found');
-      }
-
-      const finalData = {
-        user: id,
-        ...data,
-      };
-
+      const finalData = { user: userId, ...data };
       const saveData = await this.reviewModel.create(finalData);
 
-      // remove caching
-      await this.redisCacheService.del(`getAllServiceReview${data.service}`);
-      await this.redisCacheService.del(`getAllSalonReview${data.salon}`);
+      // Remove caching based on type
+      if (data.type === 'service') {
+        await this.redisCacheService.del(`getAllServiceReview${data.service}`);
+      } else if (data.type === 'vendor') {
+        await this.redisCacheService.del(`getAllVendorReview${data.vendor}`);
+      } else if (data.type === 'product') {
+        await this.redisCacheService.del(`getAllProductReview${data.product}`);
+      }
 
-      const result = {
-        success: true,
-        message: 'Create successfully',
-        data: saveData,
-      };
-
-      return result;
+      return { success: true, message: 'Review created successfully', data: saveData };
     } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
 
   // ======== Update review ========
-  async updateReview(id: string, reviewId: string, data: ReviewDto) {
+  async updateReview(userId: string, reviewId: string, data: ReviewUpdateDto) {
     try {
-      const user = await this.userModel.findById(id).exec();
+      const user = await this.userModel.findById(userId).exec();
+      if (!user) throw new NotFoundException('User not found');
 
-      if (!user) {
-        throw new NotFoundException('User not found');
+      const review = await this.reviewModel.findOne({ _id: reviewId, user: userId }).exec();
+      if (!review) throw new NotFoundException('Review not found');
+
+      Object.assign(review, data);
+      await review.save();
+
+      // Remove caching based on type
+      if (review.type === 'service') {
+        await this.redisCacheService.del(`getAllServiceReview${review.service}`);
+      } else if (review.type === 'vendor') {
+        await this.redisCacheService.del(`getAllVendorReview${review.vendor}`);
+      } else if (review.type === 'product') {
+        await this.redisCacheService.del(`getAllProductReview${review.product}`);
       }
 
-      const exist = await this.reviewModel
-        .findOne({ _id: reviewId, user: id })
-        .exec();
-
-      if (!exist) {
-        throw new NotFoundException('Post not found');
-      }
-
-      const updatedData = { ...exist.toObject(), ...data };
-
-      const updatedSaveData = await this.reviewModel.findByIdAndUpdate(
-        exist._id,
-        updatedData
-      );
-
-      // remove caching
-      await this.redisCacheService.del(`getAllServiceReview${exist.service}`);
-      await this.redisCacheService.del(`getAllSalonReview${exist.vendor}`);
-
-
-      const result = {
-        success: true,
-        message: 'Update successfully',
-        data: updatedSaveData,
-      };
-
-      return result;
+      return { success: true, message: 'Review updated successfully', data: review };
     } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
 
-  // ======== Get all review by salon ID ========
-  async getReviewBySalonId(req: any) {
-    const salonId = req.params.id;
+  // ======== Get reviews by entity ID ========
+  async getReviewsByType(type: 'service' | 'vendor' | 'product', id: string, req: any) {
     try {
-      const cacheKey = `getAllSalonReview${salonId}`;
+      const cacheKey = `getAll${type.charAt(0).toUpperCase() + type.slice(1)}Review${id}`;
       const cacheData = await this.redisCacheService.get(cacheKey);
-      if (cacheData) {
-        return cacheData;
-      }
+      if (cacheData) return cacheData;
 
-      const { keyword } = req.query;
+      const { keyword, limit, page } = req.query;
+      const perPage = limit ? parseInt(limit, 10) : undefined;
+      const currentPage = page ? parseInt(page, 10) : 1;
 
-      let perPage: number | undefined;
-
-      if (req.query && typeof req.query.limit === 'string') {
-        perPage = parseInt(req.query.limit, 10);
-      }
-
-      // Construct the search criteria
-      const searchCriteria = { salon: salonId, name: String || null };
-      if (keyword) {
-        searchCriteria.name = keyword;
-      }
+      const searchCriteria: any = { [type]: id };
+      if (keyword) searchCriteria.message = { $regex: keyword, $options: 'i' };
 
       const count = await this.reviewModel.countDocuments(searchCriteria);
 
-      const apiFeature = new ApiFeatures(
-        this.reviewModel
-          .find(searchCriteria)
-          .select('-__v')
-          .sort({ createdAt: -1 }),
-        req.query
-      )
-        .search()
-        .filter();
+      const query = this.reviewModel
+        .find(searchCriteria)
+        .select('-__v')
+        .sort({ createdAt: -1 })
+        .limit(perPage)
+        .skip(perPage ? (currentPage - 1) * perPage : 0);
 
-      if (perPage !== undefined) {
-        apiFeature.pagination(perPage);
-      }
+      const result = await query.exec();
 
-      const result = await apiFeature.query;
-      const limit = result.length;
+      const totalPages = perPage ? Math.ceil(count / perPage) : undefined;
+      const nextPage = totalPages && currentPage < totalPages ? currentPage + 1 : null;
+      const nextUrl = nextPage ? `${req.originalUrl.split('?')[0]}?limit=${perPage}&page=${nextPage}` : null;
 
-      const currentPage = req.query.page
-        ? parseInt(req.query.page as string, 10)
-        : 1;
-
-      let totalPages: number | undefined;
-
-      if (perPage !== undefined) {
-        totalPages = Math.ceil(count / perPage);
-      }
-
-      let nextPage: number | null = null;
-      let nextUrl: string | null = null;
-
-      if (perPage !== undefined && currentPage < totalPages!) {
-        nextPage = currentPage + 1;
-        nextUrl = `${req.originalUrl.split('?')[0]}?limit=${perPage}&page=${nextPage}`;
-        if (keyword) {
-          nextUrl += `&keyword=${keyword}`;
-        }
-      }
-
-      const data = {
-        success: true,
-        data: result || [],
-        total: count,
-        perPage,
-        limit,
-        nextPage,
-        nextUrl,
-      };
-
-      await this.redisCacheService.set(cacheKey, data, 1800);
-
-      return data;
+      const response = { success: true, data: result, total: count, perPage, nextPage, nextUrl };
+      await this.redisCacheService.set(cacheKey, response, 1800);
+      return response;
     } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
 
-  // ======== Get all review by service ID ========
-  async getReviewByServiceId(req: any) {
-    const serviceId = req.params.id;
+
+  // ======== Get reviews by ID based on type ========
+  async getReviewsByTypeId(type: string, id: string) {
     try {
-      const cacheKey = `getAllServiceReview${serviceId}`;
-      const cacheData = await this.redisCacheService.get(cacheKey);
-      if (cacheData) {
-        return cacheData;
-      }
+      const cacheKey = `getAll${type}Review${id}`;
+      const cachedData = await this.redisCacheService.get(cacheKey);
 
-      const { keyword } = req.query;
+      if (cachedData) return cachedData;
 
-      let perPage: number | undefined;
+      const searchCriteria = { [type]: id };
+      const reviews = await this.reviewModel.find(searchCriteria).sort({ createdAt: -1 });
 
-      if (req.query && typeof req.query.limit === 'string') {
-        perPage = parseInt(req.query.limit, 10);
-      }
-
-      // Construct the search criteria
-      const searchCriteria = { service: serviceId, name: String || null };
-      if (keyword) {
-        searchCriteria.name = keyword;
-      }
-
-      const count = await this.reviewModel.countDocuments(searchCriteria);
-
-      const apiFeature = new ApiFeatures(
-        this.reviewModel
-          .find(searchCriteria)
-          .select('-__v')
-          .sort({ createdAt: -1 }),
-        req.query
-      )
-        .search()
-        .filter();
-
-      if (perPage !== undefined) {
-        apiFeature.pagination(perPage);
-      }
-
-      const result = await apiFeature.query;
-      const limit = result.length;
-
-      const currentPage = req.query.page
-        ? parseInt(req.query.page as string, 10)
-        : 1;
-
-      let totalPages: number | undefined;
-
-      if (perPage !== undefined) {
-        totalPages = Math.ceil(count / perPage);
-      }
-
-      let nextPage: number | null = null;
-      let nextUrl: string | null = null;
-
-      if (perPage !== undefined && currentPage < totalPages!) {
-        nextPage = currentPage + 1;
-        nextUrl = `${req.originalUrl.split('?')[0]}?limit=${perPage}&page=${nextPage}`;
-        if (keyword) {
-          nextUrl += `&keyword=${keyword}`;
-        }
-      }
-
-      const data = {
+      const response = {
         success: true,
-        data: result || [],
-        total: count,
-        perPage,
-        limit,
-        nextPage,
-        nextUrl,
+        total: reviews.length,
+        data: reviews,
       };
 
-      await this.redisCacheService.set(cacheKey, data, 1800);
-
-      return data;
+      await this.redisCacheService.set(cacheKey, response, 1800);
+      return response;
     } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
