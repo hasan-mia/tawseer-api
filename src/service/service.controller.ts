@@ -13,7 +13,7 @@ import {
 } from '@nestjs/common';
 
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
-import { ServiceDto } from './dto/service.dto';
+import { ServiceDto, UpdateServiceDto } from './dto/service.dto';
 import { ServiceService } from './service.service';
 
 @Controller('services')
@@ -33,7 +33,7 @@ export class ServiceController {
   @Put(':id')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.ACCEPTED)
-  async updateService(@Param('id') id: string, @Body() data: ServiceDto, @Request() req) {
+  async updateService(@Param('id') id: string, @Body() data: UpdateServiceDto, @Request() req) {
     const user = req.user;
     return this.serviceService.updateService(user.id, id, data);
   }
@@ -54,9 +54,9 @@ export class ServiceController {
   }
 
   // ======== Get service details by id ========
-  @Get('salon/:id')
+  @Get('vendor/:id')
   @HttpCode(HttpStatus.OK)
-  async getAllServiceBySalonId(@Param('id') id: string, @Request() req) {
-    return this.serviceService.getAllServiceBySalonId(id, req);
+  async getAllServiceByVendorId(@Param('id') id: string, @Request() req) {
+    return this.serviceService.getAllServiceByVendorId(id, req);
   }
 }

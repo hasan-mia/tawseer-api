@@ -5,11 +5,46 @@ export class ServiceDto {
 
   @IsString()
   @IsOptional()
-  readonly vendor?: string;
+  readonly user?: string;
 
   @IsString()
   @IsOptional()
-  readonly salon?: string;
+  readonly vendor?: string;
+
+  @IsString()
+  readonly name: string;
+
+  @IsString()
+  readonly description: string;
+
+  @IsNumber()
+  readonly price: number;
+
+  @IsString()
+  @IsOptional()
+  readonly currency: string;
+
+  @IsNumber()
+  readonly duration: number;
+
+  @IsString()
+  readonly image: string;
+
+  @IsString()
+  @IsOptional()
+  readonly country?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  readonly isDiscount?: boolean;
+
+  @IsString()
+  @IsOptional()
+  readonly coupon?: string;
+
+}
+
+export class UpdateServiceDto {
 
   @IsString()
   @IsOptional()

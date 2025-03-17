@@ -1,4 +1,5 @@
 
+import { Vendor } from '@/schemas/vendor.schema';
 import {
   BadRequestException,
   Injectable,
@@ -7,11 +8,10 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Salon } from 'src/schemas/salon.schema';
 import { Service } from 'src/schemas/service.schema';
 import { RedisCacheService } from '../rediscloud.service';
 import { User } from '../schemas/user.schema';
-import { ServiceDto } from './dto/service.dto';
+import { ServiceDto, UpdateServiceDto } from './dto/service.dto';
 
 @Injectable()
 export class ServiceService {
@@ -20,29 +20,29 @@ export class ServiceService {
     private userModel: Model<User>,
     @InjectModel(Service.name)
     private serviceModel: Model<Service>,
-    @InjectModel(Salon.name)
-    private salonModel: Model<Salon>,
+    @InjectModel(Vendor.name)
+    private vendorModel: Model<Vendor>,
     private readonly redisCacheService: RedisCacheService
   ) { }
 
   // ======== Create new service ========
   async createService(id: string, data: ServiceDto) {
     try {
-      const user = await this.userModel.findById(id).exec();
+      const user = await this.userModel.findById(id);
 
       if (!user) {
         throw new NotFoundException('User not found');
       }
 
-      const salon = await this.salonModel.findOne({ vendor: id }).exec();
+      const existVendor = await this.vendorModel.findOne({ vendor: id });
 
-      if (!salon) {
-        throw new NotFoundException('Salon not found');
+      if (!existVendor) {
+        throw new NotFoundException('Vendor not found');
       }
 
       const finalData = {
-        vendor: id,
-        salon: salon._id,
+        user: id,
+        vendor: existVendor._id,
         ...data,
       };
 
@@ -67,7 +67,7 @@ export class ServiceService {
   }
 
   // ======== Update service ========
-  async updateService(id: string, postId: string, data: ServiceDto) {
+  async updateService(id: string, postId: string, data: UpdateServiceDto) {
     try {
       const user = await this.userModel.findById(id).exec();
 
@@ -154,7 +154,7 @@ export class ServiceService {
 
       const query = this.serviceModel
         .find(searchCriteria)
-        .populate('salon', 'name mobile email')
+        .populate('user', 'name mobile email')
         .populate('vendor', 'name email mobile')
         .select('-__v')
         .sort({ createdAt: -1 })
@@ -217,7 +217,7 @@ export class ServiceService {
       }
 
       const data = await this.serviceModel.findById(id)
-        .populate('salon', 'name mobile email')
+        .populate('user', 'name mobile email')
         .populate('vendor', 'name email mobile')
         .exec();
 
@@ -243,18 +243,18 @@ export class ServiceService {
     }
   }
 
-  // ======== Get all service by salon ID ========
-  async getAllServiceBySalonId(id: string, req: any) {
+  // ======== Get all service by vendor ID ========
+  async getAllServiceByVendorId(id: string, req: any) {
     try {
       const cacheKey = `getAllService-${id}`;
       const cacheData = await this.redisCacheService.get(cacheKey);
-      if (cacheData) {
-        return cacheData;
-      }
+      // if (cacheData) {
+      //   return cacheData;
+      // }
 
-      const salonExists = await this.salonModel.findById(id);
-      if (!salonExists) {
-        throw new NotFoundException('Salon not found');
+      const existVendor = await this.vendorModel.findById(id);
+      if (!existVendor) {
+        throw new NotFoundException('Vendor not found');
       }
 
       const { keyword, price, cat, limit, page } = req.query;
@@ -264,7 +264,7 @@ export class ServiceService {
         perPage = parseInt(limit, 10);
       }
 
-      const searchCriteria: any = { salon: new Types.ObjectId(id), is_deleted: false, };
+      const searchCriteria: any = { vendor: new Types.ObjectId(id), is_deleted: false, };
 
       if (keyword) {
         searchCriteria.$or = [
@@ -291,7 +291,7 @@ export class ServiceService {
 
       const query = this.serviceModel
         .find(searchCriteria)
-        .populate('salon', 'name mobile email')
+        .populate('user', 'name mobile email')
         .populate('vendor', 'name email mobile')
         .select('-__v')
         .sort({ createdAt: -1 })

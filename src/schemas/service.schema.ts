@@ -13,7 +13,7 @@ export class Service extends Document {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   user: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'vendor', required: true })
+  @Prop({ type: Types.ObjectId, ref: 'Vendor', required: true })
   vendor: Types.ObjectId;
 
   @Prop({ required: true })

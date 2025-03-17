@@ -1,9 +1,9 @@
 /* eslint-disable prettier/prettier */
 import { RedisCacheService } from '@/rediscloud.service';
+import { VendorSchema } from '@/schemas/vendor.schema';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { CloudinaryService } from 'src/cloudinary/cloudinary.service';
-import { SalonSchema } from 'src/schemas/salon.schema';
 import { ServiceSchema } from 'src/schemas/service.schema';
 import { UserSchema } from '../schemas/user.schema';
 import { ServiceController } from './service.controller';
@@ -14,7 +14,7 @@ import { ServiceService } from './service.service';
     MongooseModule.forFeature([
       { name: 'User', schema: UserSchema },
       { name: 'Service', schema: ServiceSchema },
-      { name: 'Salon', schema: SalonSchema },
+      { name: 'Vendor', schema: VendorSchema },
     ]),
   ],
   controllers: [ServiceController],
