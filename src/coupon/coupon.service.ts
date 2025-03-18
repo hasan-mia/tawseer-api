@@ -1,4 +1,6 @@
-/* eslint-disable prettier/prettier */
+import { Coupon } from '@/schemas/coupon.schema';
+import { User } from '@/schemas/user.schema';
+import { Vendor } from '@/schemas/vendor.schema';
 import {
   Injectable,
   InternalServerErrorException,
@@ -7,16 +9,16 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { ApiFeatures } from 'src/helpers/apiFeatures.helper';
-import { Coupon } from 'src/schemas/coupon.schema';
 import { RedisCacheService } from '../rediscloud.service';
-import { User } from '../schemas/user.schema';
-import { CouponDto } from './dto/coupon.dto';
+import { CouponDto, CouponUpdateDto } from './dto/coupon.dto';
 
 @Injectable()
 export class CouponService {
   constructor(
     @InjectModel(User.name)
     private userModel: Model<User>,
+    @InjectModel(Vendor.name)
+    private vendorModel: Model<Vendor>,
     @InjectModel(Coupon.name)
     private couponModel: Model<Coupon>,
     private readonly redisCacheService: RedisCacheService
@@ -26,107 +28,114 @@ export class CouponService {
   async createCoupon(id: string, data: CouponDto) {
     try {
       const user = await this.userModel.findById(id).exec();
-
       if (!user) {
         throw new NotFoundException('User not found');
       }
 
-      const finalData = {
-        user: id,
-        ...data,
-      };
+      const existingCoupon = await this.couponModel.findOne({ code: data.code });
+      if (existingCoupon) {
+        throw new Error('Coupon code already exists');
+      }
+
+      if (data.expiredAt && new Date(data.expiredAt) < new Date()) {
+        throw new Error('Expiration date must be in the future');
+      }
+
+      const finalData = { user: id, ...data };
 
       const saveData = await this.couponModel.create(finalData);
 
-      // remove caching
-      await this.redisCacheService.del(`getAllSalonCoupon${data.salon}`);
+      // if (data.vendor) {
+      //   await this.redisCacheService.del(`getAllVendorCoupon${data.vendor}`);
+      // }
 
-      const result = {
-        success: true,
-        message: 'Create successfully',
-        data: saveData,
-      };
-
-      return result;
+      return { success: true, message: 'Created successfully', data: saveData };
     } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
 
   // ======== Update coupon ========
-  async updateCoupon(id: string, couponId: string, data: CouponDto) {
+  async updateCoupon(id: string, couponId: string, data: CouponUpdateDto) {
     try {
       const user = await this.userModel.findById(id).exec();
-
       if (!user) {
         throw new NotFoundException('User not found');
       }
 
-      const exist = await this.couponModel
-        .findOne({ _id: couponId, user: id })
-        .exec();
-
+      const exist = await this.couponModel.findOne({ _id: couponId, user: id }).exec();
       if (!exist) {
         throw new NotFoundException('Coupon not found');
       }
 
-      const updatedData = { ...exist.toObject(), ...data };
+      // Ensure unique coupon code if updating
+      if (data.code && data.code !== exist.code) {
+        const duplicateCoupon = await this.couponModel.findOne({ code: data.code });
+        if (duplicateCoupon) {
+          throw new Error('Coupon code already exists');
+        }
+      }
 
+      // Ensure expiration date is in the future
+      if (data.expiredAt && new Date(data.expiredAt) < new Date()) {
+        throw new Error('Expiration date must be in the future');
+      }
+
+      // Update coupon
       const updatedSaveData = await this.couponModel.findByIdAndUpdate(
         exist._id,
-        updatedData
+        { $set: data },
+        { new: true }
       );
 
-      // remove caching
-      await this.redisCacheService.del(`getAllSalonCoupon${exist.salon}`);
+      // Remove cache
+      if (exist.vendor) {
+        await this.redisCacheService.del(`getAllVendorCoupon${exist.vendor}`);
+      }
 
-      const result = {
-        success: true,
-        message: 'Update successfully',
-        data: updatedSaveData,
-      };
-
-      return result;
+      return { success: true, message: 'Updated successfully', data: updatedSaveData };
     } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
 
-  // ======== Get all coupon by salon ID ========
-  async getCouponBySalonId(req: any) {
+
+  // ======== Get all coupon by Vendor ID ========
+  async getCouponByVendorId(req: any) {
     const salonId = req.params.id;
     try {
-      const cacheKey = `getAllSalonCoupon${salonId}`;
+      const cacheKey = `getAllVendorCoupon${salonId}`;
       const cacheData = await this.redisCacheService.get(cacheKey);
+
       if (cacheData) {
-        return cacheData;
+        return JSON.parse(cacheData); // Ensure JSON parsing
       }
 
       const { keyword } = req.query;
 
       let perPage: number | undefined;
-
       if (req.query && typeof req.query.limit === 'string') {
         perPage = parseInt(req.query.limit, 10);
       }
 
-      // Construct the search criteria
-      const searchCriteria = { salon: salonId, name: String || null };
+      // Correct search query: vendor instead of salon
+      const searchCriteria: any = { vendor: salonId };
       if (keyword) {
-        searchCriteria.name = keyword;
+        searchCriteria.code = { $regex: keyword, $options: 'i' };
       }
 
       const count = await this.couponModel.countDocuments(searchCriteria);
 
       const apiFeature = new ApiFeatures(
-        this.couponModel
-          .find(searchCriteria)
-          .select('-__v')
-          .sort({ createdAt: -1 }),
+        this.couponModel.find(searchCriteria).select('-__v').sort({ createdAt: -1 }),
         req.query
-      )
-        .search()
-        .filter();
+      ).search().filter();
 
       if (perPage !== undefined) {
         apiFeature.pagination(perPage);
@@ -135,44 +144,32 @@ export class CouponService {
       const result = await apiFeature.query;
       const limit = result.length;
 
-      const currentPage = req.query.page
-        ? parseInt(req.query.page as string, 10)
-        : 1;
+      const currentPage = req.query.page ? parseInt(req.query.page as string, 10) : 1;
+      const totalPages = perPage !== undefined ? Math.ceil(count / perPage) : undefined;
 
-      let totalPages: number | undefined;
+      const nextPage = perPage !== undefined && currentPage < totalPages ? currentPage + 1 : null;
+      let nextUrl = null;
 
-      if (perPage !== undefined) {
-        totalPages = Math.ceil(count / perPage);
-      }
-
-      let nextPage: number | null = null;
-      let nextUrl: string | null = null;
-
-      if (perPage !== undefined && currentPage < totalPages!) {
-        nextPage = currentPage + 1;
+      if (nextPage) {
         nextUrl = `${req.originalUrl.split('?')[0]}?limit=${perPage}&page=${nextPage}`;
         if (keyword) {
           nextUrl += `&keyword=${keyword}`;
         }
       }
 
-      const data = {
-        success: true,
-        data: result || [],
-        total: count,
-        perPage,
-        limit,
-        nextPage,
-        nextUrl,
-      };
+      const data = { success: true, data: result, total: count, perPage, limit, nextPage, nextUrl };
 
-      await this.redisCacheService.set(cacheKey, data, 1800);
+      await this.redisCacheService.set(cacheKey, JSON.stringify(data), 1800); // Store as JSON
 
       return data;
     } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
+
 
 
 }

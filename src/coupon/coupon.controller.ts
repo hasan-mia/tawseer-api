@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Post,
   Put,
   Request,
   UseGuards,
@@ -12,14 +13,14 @@ import {
 
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { CouponService } from './coupon.service';
-import { CouponDto } from './dto/coupon.dto';
+import { CouponDto, CouponUpdateDto } from './dto/coupon.dto';
 
-@Controller('coupon')
+@Controller('coupons')
 export class CouponController {
   constructor(private reviewService: CouponService) { }
 
   // ======== Create coupon ========
-  @Put('create')
+  @Post('')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.CREATED)
   async createCoupon(@Body() data: CouponDto, @Request() req) {
@@ -28,10 +29,10 @@ export class CouponController {
   }
 
   // ======== Update coupon ========
-  @Put('update/:id')
+  @Put(':id')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.ACCEPTED)
-  async updateCoupon(@Body() data: CouponDto, @Request() req) {
+  async updateCoupon(@Body() data: CouponUpdateDto, @Request() req) {
     const user = req.user;
     const postId = req.params.id;
     return this.reviewService.updateCoupon(user.id, postId, data);
@@ -39,10 +40,10 @@ export class CouponController {
 
 
   // ======== Get coupon by salon id ========
-  @Get('salon/:id')
+  @Get('vendor/:id')
   @HttpCode(HttpStatus.OK)
-  async getCouponBySalonId(@Request() req) {
-    return this.reviewService.getCouponBySalonId(req);
+  async getCouponByVendorId(@Request() req) {
+    return this.reviewService.getCouponByVendorId(req);
   }
 
 

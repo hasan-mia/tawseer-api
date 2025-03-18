@@ -1,12 +1,12 @@
 /* eslint-disable prettier/prettier */
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Types } from 'mongoose';
+import { Document, Model, Types } from 'mongoose';
 import { v4 as uuidv4 } from 'uuid';
 
 @Schema({
   timestamps: true,
 })
-export class Contact extends Document {
+export class Address extends Document {
   @Prop({ default: () => uuidv4() })
   uuid: string;
 
@@ -32,7 +32,21 @@ export class Contact extends Document {
   country: string;
 
   @Prop({ type: Boolean, default: false })
+  is_default: boolean;
+
+  @Prop({ type: Boolean, default: false })
   is_deleted: boolean;
 }
 
-export const ContactSchema = SchemaFactory.createForClass(Contact);
+export const AddressSchema = SchemaFactory.createForClass(Address);
+
+AddressSchema.pre<Address>('save', async function (next) {
+  if (this.is_default) {
+    const model = this.constructor as Model<Address>;
+    await model.updateMany(
+      { user: this.user, _id: { $ne: this._id } },
+      { $set: { is_default: false } }
+    );
+  }
+  next();
+});

@@ -1,5 +1,5 @@
-/* eslint-disable prettier/prettier */
-import { IsDate, IsEnum, IsNotEmpty, IsNumber, IsString } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsDate, IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
 
 export enum CouponType {
   Percentage = 'percentage',
@@ -7,15 +7,6 @@ export enum CouponType {
 }
 
 export class CouponDto {
-
-  @IsString()
-  @IsNotEmpty()
-  readonly user: string;
-
-  @IsString()
-  @IsNotEmpty()
-  readonly salon: string;
-
   @IsString()
   @IsNotEmpty()
   readonly code: string;
@@ -30,8 +21,29 @@ export class CouponDto {
   @IsNotEmpty()
   readonly discount: number;
 
+  @IsOptional()
+  @Type(() => Date)
   @IsDate()
-  @IsNotEmpty()
-  readonly expiredAt: Date;
+  readonly expiredAt?: Date;
+}
 
+export class CouponUpdateDto {
+  @IsString()
+  @IsOptional()
+  readonly code: string;
+
+  @IsEnum(CouponType, {
+    message: 'Type must be one of: percentage or amount',
+  })
+  @IsOptional()
+  readonly type?: CouponType;
+
+  @IsNumber()
+  @IsOptional()
+  readonly discount?: number;
+
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  readonly expiredAt?: Date;
 }

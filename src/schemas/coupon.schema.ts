@@ -13,8 +13,8 @@ export class Coupon extends Document {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   user: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'Salon' })
-  salon: Types.ObjectId;
+  @Prop({ type: Types.ObjectId, ref: 'Vendor', required: false })
+  vendor: Types.ObjectId;
 
   @Prop({ type: String, unique: true })
   code: string
