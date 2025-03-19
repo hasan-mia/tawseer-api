@@ -1,3 +1,5 @@
+import { LocationDto } from '@/vendor/dto/updateVendor.dto';
+import { Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
@@ -7,6 +9,7 @@ import {
   IsPhoneNumber,
   IsString,
   IsStrongPassword,
+  ValidateNested,
 } from 'class-validator';
 
 export class UserDto {
@@ -80,9 +83,10 @@ export class UserDto {
   @IsOptional()
   readonly fcmToken?: string;
 
-  @IsArray()
+  @ValidateNested()
+  @Type(() => LocationDto)
   @IsOptional()
-  readonly location?: string[];
+  readonly location?: LocationDto;
 
   @IsString()
   @IsOptional()

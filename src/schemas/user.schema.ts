@@ -79,8 +79,14 @@ export class User extends Document {
   @Prop()
   fcmToken: string;
 
-  @Prop({ type: [String], default: [] })
-  location: string[];
+  @Prop({
+    type: { type: String, default: 'Point' },
+    coordinates: { type: [Number], default: [0, 0] },
+  })
+  location: {
+    type: string;
+    coordinates: number[];
+  };
 
   @Prop({ type: [{ type: Types.ObjectId, ref: 'User' }] })
   parent: string;

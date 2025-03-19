@@ -10,4 +10,10 @@ export class OtpDto {
 
   @IsOptional()
   readonly otp?: number;
+
+  @IsOptional()
+  readonly token?: string;
+
+  @IsOptional()
+  readonly password?: string;
 }

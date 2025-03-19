@@ -44,10 +44,19 @@ export class AuthController {
   }
 
   // ======== Reset otp ========
-  @Put('reset-password')
+  @Put('varify-otp')
   @HttpCode(HttpStatus.OK)
-  resetPassword(@Body() otp: OtpDto) {
-    return this.authService.resetPassword(otp);
+  varifyOtp(@Body() data: OtpDto) {
+    return this.authService.varifyOtp(data);
+  }
+
+  // ======== Reset otp ========
+  @Put('reset-password')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  resetPassword(@Body() data: OtpDto, @Request() req) {
+    const user = req.user;
+    return this.authService.resetPassword(user.id, data);
   }
 
   // ======== Get my Information ========

@@ -13,7 +13,7 @@ export class AppService {
     }
 
     // Send Email Server
-    sendMail(options: any) {
+    sendOtp(options: any) {
         const htmlTemplate = `
             <!DOCTYPE html>
             <html lang="en">
@@ -49,14 +49,14 @@ export class AppService {
                     <p>Hello, ${options.name}</p>
                     ${options.message}
                     <p>If you did not request this, please ignore this email.</p>
-                    <p>Best regards,<br>Salon Team</p>
+                    <p>Best regards,<br>Tawseer Team</p>
                 </div>
             </body>
             </html>
         `;
 
         const mailOptions = {
-            from: `Salon <${process.env.SMTP_MAIL}>`,
+            from: `Tawseer <${process.env.SMTP_MAIL}>`,
             to: options.email,
             subject: options.subject,
             html: htmlTemplate,

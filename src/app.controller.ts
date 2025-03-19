@@ -15,12 +15,12 @@ export class AppController {
   sendMailer(@Res() response: any) {
     const options = {
       email: 'hasanrafi69@gmail.com',
-      name: 'Salon',
+      name: 'Tawseer',
       subject: 'Test Email',
       message: 'Test Email'
     };
     try {
-      this.appService.sendMail(options);
+      this.appService.sendOtp(options);
 
       return response.status(200).json({
         message: 'success',

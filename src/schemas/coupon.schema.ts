@@ -16,6 +16,12 @@ export class Coupon extends Document {
   @Prop({ type: Types.ObjectId, ref: 'Vendor', required: false })
   vendor: Types.ObjectId;
 
+  @Prop({ type: String, required: true })
+  name: string
+
+  @Prop({ type: String, required: false })
+  image: string
+
   @Prop({ type: String, unique: true })
   code: string
 

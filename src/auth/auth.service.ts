@@ -24,11 +24,10 @@ export class AuthService {
   constructor(
     private jwtService: JwtService,
     private smsService: SmsService,
-    private emailService: EmailService,
+    private readonly emailService: EmailService,
     private readonly redisCacheService: RedisCacheService,
     @InjectModel(User.name)
     private userModel: Model<User>
-    // eslint-disable-next-line prettier/prettier
   ) { }
 
   // =============== Sign up  with email & password=================
@@ -119,23 +118,26 @@ export class AuthService {
         throw new NotFoundException('User not found.');
       }
 
-      // generate otp
+      // Generate OTP
       const otp = generateRandomFourDigitOtp();
 
+      // Save OTP to the user document
       user.otp = otp;
       await user.save();
 
-      const name = user.first_name + user.last_name || 'Sir..';
+      const name = user?.first_name + user?.last_name || 'Sir..';
 
-      //Email data
+      // Email data
       const emailOptions = {
         name: name,
-        email: user.email,
+        email: email,
         subject: 'Password Reset OTP',
         message: `<p>Your OTP for password reset is: ${otp}</p>`,
       };
 
-      await this.emailService.sendMail(emailOptions)
+      // Send OTP via email
+      this.emailService.sendOtp(emailOptions);
+
       const result = {
         success: true,
         message: 'An OTP has been sent to your email.',
@@ -150,27 +152,66 @@ export class AuthService {
     }
   }
 
-  // =============== Reset password with otp =================
-  async resetPassword(data: OtpDto): Promise<{ token: string }> {
-    const { email, otp } = data;
-    const user = await this.userModel.findOne({ email, otp });
+  // =============== Varify otp =================
+  async varifyOtp(data: OtpDto) {
+    try {
+      const { email, otp } = data;
+      const user = await this.userModel.findOne({ email, otp });
 
-    if (!user) {
-      throw new UnauthorizedException('Invalid OTP');
+      if (!user) {
+        throw new UnauthorizedException('Invalid OTP');
+      }
+
+      // Clear the OTP after successful verification
+      await this.userModel.findOneAndUpdate({ email }, { otp: '' });
+
+      // Generate JWT token
+      const token = this.jwtService.sign(
+        { id: user._id },
+        { expiresIn: '1m' }
+      );
+
+      const result = {
+        message: 'Successfully verified',
+        token: token,
+      };
+
+      return result;
+    } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException || error instanceof UnauthorizedException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(error.message);
     }
+  }
 
-    // Clear the OTP after successful verification
-    await this.userModel.findOneAndUpdate({ email }, { otp: '' });
+  // =============== Reset password with otp =================
+  async resetPassword(userId: string, data: OtpDto) {
+    try {
+      const { password } = data;
+      const user = await this.userModel.findOne({ _id: userId });
 
-    // Generate JWT token
-    const token = this.jwtService.sign({ id: user._id });
+      if (!user) {
+        throw new UnauthorizedException('Invalid OTP');
+      }
 
-    const result = {
-      message: 'Successfully verified',
-      token: token,
-    };
+      // Hash the password
+      const hashedPassword = await bcrypt.hash(password, 10);
 
-    return result;
+      await this.userModel.findOneAndUpdate({ _id: userId }, { password: hashedPassword });
+
+      const result = {
+        message: 'Password reset successfully',
+
+      };
+
+      return result;
+    } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException || error instanceof UnauthorizedException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(error.message);
+    }
   }
 
   // =========Ge My Info =============

@@ -8,7 +8,7 @@ import {
   ValidateNested
 } from 'class-validator';
 
-class LocationDto {
+export class LocationDto {
   @IsString()
   @IsOptional()
   readonly type?: string = 'Point';

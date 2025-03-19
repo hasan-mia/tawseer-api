@@ -7,7 +7,7 @@ export class Product extends Document {
   @Prop({ required: true })
   name: string;
 
-  @Prop({ unique: true })
+  @Prop({ type: String, unique: true })
   slug: string;
 
   @Prop()
@@ -49,6 +49,3 @@ ProductSchema.pre<Product>('save', async function (next) {
 
   next();
 });
-
-
-ProductSchema.index({ slug: 1 }, { unique: true });

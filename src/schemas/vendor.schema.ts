@@ -16,7 +16,7 @@ export class Vendor extends Document {
     @Prop({ required: true })
     name: string;
 
-    @Prop({ unique: true })
+    @Prop({ type: String, unique: true })
     slug: string;
 
     @Prop({ required: true })
@@ -85,8 +85,5 @@ VendorSchema.pre<Vendor>('save', async function (next) {
 
     next();
 });
-
-
-VendorSchema.index({ slug: 1 }, { unique: true });
 
 VendorSchema.index({ location: '2dsphere' });

@@ -9,6 +9,14 @@ export enum CouponType {
 export class CouponDto {
   @IsString()
   @IsNotEmpty()
+  readonly name: string;
+
+  @IsString()
+  @IsOptional()
+  readonly image?: string;
+
+  @IsString()
+  @IsNotEmpty()
   readonly code: string;
 
   @IsEnum(CouponType, {
@@ -30,7 +38,15 @@ export class CouponDto {
 export class CouponUpdateDto {
   @IsString()
   @IsOptional()
-  readonly code: string;
+  readonly name?: string;
+
+  @IsString()
+  @IsOptional()
+  readonly image?: string;
+
+  @IsString()
+  @IsOptional()
+  readonly code?: string;
 
   @IsEnum(CouponType, {
     message: 'Type must be one of: percentage or amount',

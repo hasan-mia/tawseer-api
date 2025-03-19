@@ -1,4 +1,3 @@
-/* eslint-disable prettier/prettier */
 import { MailerModule } from '@nestjs-modules/mailer';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
@@ -19,7 +18,6 @@ import { ReplyModule } from './postreply/reply.module';
 import { ProductModule } from './product/product.module';
 import { RedisCacheService } from './rediscloud.service';
 import { ReviewModule } from './review/review.module';
-import { SalonModule } from './salon/salon.module';
 import { ServiceModule } from './service/service.module';
 import { SocketModule } from './socket/socket.module';
 import { UploadModule } from './upload/upload.module';
@@ -51,7 +49,6 @@ import { VendorModule } from './vendor/vendor.module';
     PaymentModule,
     UploadModule,
     FriendModule,
-    SalonModule,
     ServiceModule,
     ReviewModule,
     AppointmentModule,

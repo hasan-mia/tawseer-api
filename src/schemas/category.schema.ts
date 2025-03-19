@@ -40,5 +40,3 @@ CategorySchema.pre<Category>('save', async function (next) {
 
   next();
 });
-
-CategorySchema.index({ slug: 1 }, { unique: true });
