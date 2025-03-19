@@ -1,4 +1,3 @@
-/* eslint-disable prettier/prettier */
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { v4 as uuidv4 } from 'uuid';
@@ -42,6 +41,12 @@ export class Service extends Document {
 
   @Prop({ type: Types.ObjectId, ref: 'Coupon' })
   coupon: Types.ObjectId;
+
+  @Prop()
+  chargeAmount: number;
+
+  @Prop({ enum: ['fixed', 'percentage'], default: 'fixed' })
+  chargeType: string;
 
   @Prop({ type: Boolean, default: false })
   is_deleted: boolean;

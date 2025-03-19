@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 @Schema({
   timestamps: true,
 })
-export class Subscribe extends Document {
+export class Subscription extends Document {
   @Prop({ default: () => uuidv4() })
   uuid: string;
 
@@ -58,4 +58,4 @@ export class Subscribe extends Document {
 
 }
 
-export const SubscribeSchema = SchemaFactory.createForClass(Subscribe);
+export const SubscriptionSchema = SchemaFactory.createForClass(Subscription);

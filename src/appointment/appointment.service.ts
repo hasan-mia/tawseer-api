@@ -93,8 +93,8 @@ export class AppointmentService {
 
       // remove caching
       await this.redisCacheService.del('getAllAppointment');
-      await this.redisCacheService.del(`getAllSalonAppointment${exist.salon}`);
-      await this.redisCacheService.del(`getConfirmSalonAppointment${exist.salon}`);
+      await this.redisCacheService.del(`getAllSalonAppointment${exist.vendor}`);
+      await this.redisCacheService.del(`getConfirmSalonAppointment${exist.vendor}`);
       await this.redisCacheService.del(`getAllUserAppointment${userId}`);
 
       const result = {
