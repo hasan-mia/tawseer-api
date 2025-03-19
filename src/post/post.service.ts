@@ -1,6 +1,6 @@
 /* eslint-disable prettier/prettier */
 import { CloudinaryService } from '@/cloudinary/cloudinary.service';
-import { getPublicIdFromUrl } from '@/helpers/uniqID.helper';
+import { getPublicIdFromUrl } from '@/helpers/myHelper.helper';
 import { Friend } from '@/schemas/friend.schema';
 import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';

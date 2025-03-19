@@ -1,4 +1,3 @@
-/* eslint-disable prettier/prettier */
 import otpGenerator from "otp-generator";
 
 export const uniqueID = () => {
@@ -19,3 +18,15 @@ export const getPublicIdFromUrl = (url: string): string | null => {
     const match = url.match(regex);
     return match ? match[1] : null;
 }
+
+export const calculateTransactionFee = (amount: number, type: string) => {
+    const feeRates = {
+        service: 0.02,  // 2%
+        product: 0.03,  // 3%
+        withdraw: 0.05, // 5%
+        deposit: 0,     // No fee
+    };
+
+    return amount * (feeRates[type] || 0.02);
+}
+

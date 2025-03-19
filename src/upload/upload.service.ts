@@ -1,6 +1,6 @@
 /* eslint-disable prettier/prettier */
 import { CloudinaryService } from '@/cloudinary/cloudinary.service';
-import { getPublicIdFromUrl } from '@/helpers/uniqID.helper';
+import { getPublicIdFromUrl } from '@/helpers/myHelper.helper';
 import {
   BadRequestException,
   Injectable,
