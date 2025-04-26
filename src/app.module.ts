@@ -11,6 +11,7 @@ import { CloudinaryModule } from './cloudinary/cloudinary.module';
 import { CouponModule } from './coupon/coupon.module';
 import { FileUploadModule } from './fileupload/fileupload.module';
 import { FriendModule } from './friend/friend.module';
+import { MessageModule } from './message/message.module';
 import { PaymentModule } from './payment/payment.module';
 import { PostModule } from './post/post.module';
 import { CommentModule } from './postcomment/comment.module';
@@ -59,6 +60,7 @@ import { VendorModule } from './vendor/vendor.module';
     VendorModule,
     CategoryModule,
     ProductModule,
+    MessageModule
   ],
   controllers: [AppController],
   providers: [AppService, RedisCacheService],
