@@ -44,27 +44,34 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
                 socket.handshake.headers.authorization?.split(' ')[1];
 
             if (!token) {
+                socket.emit('auth_error', { message: 'No authentication token provided' });
                 socket.disconnect();
+                console.log('No token provided, disconnecting socket', socket.id);
                 return;
             }
 
-            // Verify the token
-            const payload = this.jwtService.verify(token);
-            const userId = payload.sub || payload._id;
+            try {
+                // Verify the token
+                const payload = this.jwtService.verify(token);
+                const userId = payload.sub || payload.id;
 
-            // Store the user connection
-            this.connectedUsers.set(userId, socket.id);
+                // Store the user connection
+                this.connectedUsers.set(userId, socket.id);
 
-            // Join user to their own room for targeted messages
-            socket.join(`user:${userId}`);
+                // Join user to their own room for targeted messages
+                socket.join(`user:${userId}`);
 
-            console.log(`User ${userId} authenticated and connected`);
+                console.log(`User ${userId} authenticated and connected`);
+            } catch (jwtError) {
+                socket.emit('auth_error', { message: 'Invalid authentication token' });
+                socket.disconnect();
+                console.log(`Invalid token, disconnecting socket: ${socket.id}`);
+            }
         } catch (error) {
             console.error('Socket connection error:', error);
             socket.disconnect();
         }
     }
-
     handleDisconnect(socket: Socket) {
         console.log(`Client disconnected: ${socket.id}`);
 
