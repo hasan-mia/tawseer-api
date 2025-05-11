@@ -89,7 +89,7 @@ export class Transaction extends Document {
   amount: number;
 
   @Prop({ type: Number, required: false, min: 0 })
-  totalAmount: number; // amount + charge
+  totalAmount: number; // amount + charge + tax
 
   @Prop({ type: String, required: true })
   currency: string;
@@ -105,6 +105,9 @@ export class Transaction extends Document {
 
   @Prop({ type: Number, required: false, min: 0 })
   charge: number;
+
+  @Prop({ type: Number, required: false, min: 0 })
+  tax: number;
 
   @Prop({ type: UserRefSchema, required: false })
   sender: UserRef;

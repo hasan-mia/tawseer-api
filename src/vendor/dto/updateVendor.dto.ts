@@ -1,12 +1,25 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   IsArray,
   IsBoolean,
+  IsEnum,
   IsOptional,
   IsPhoneNumber,
   IsString,
+  Matches,
   ValidateNested
 } from 'class-validator';
+
+export enum DayOfWeek {
+  MONDAY = 'monday',
+  TUESDAY = 'tuesday',
+  WEDNESDAY = 'wednesday',
+  THURSDAY = 'thursday',
+  FRIDAY = 'friday',
+  SATURDAY = 'saturday',
+  SUNDAY = 'sunday',
+}
 
 export class LocationDto {
   @IsString()
@@ -16,6 +29,44 @@ export class LocationDto {
   @IsArray()
   @IsOptional()
   readonly coordinates?: number[];
+}
+
+export class OpeningHoursPerDayDto {
+  @IsEnum(DayOfWeek)
+  @IsOptional()
+  readonly day?: DayOfWeek;
+
+  @IsString()
+  @IsOptional()
+  @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/, {
+    message: 'Opens time must be in format HH:MM (24-hour format)'
+  })
+  readonly opens?: string;
+
+  @IsString()
+  @IsOptional()
+  @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/, {
+    message: 'Closes time must be in format HH:MM (24-hour format)'
+  })
+  readonly closes?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  readonly isOpen?: boolean;
+}
+
+export class FacilityDto {
+  @IsString()
+  @IsOptional()
+  readonly name?: string;
+
+  @IsString()
+  @IsOptional()
+  readonly description?: string;
+
+  @IsString()
+  @IsOptional()
+  readonly icon?: string;
 }
 
 export class updateVendor {
@@ -55,6 +106,19 @@ export class updateVendor {
   @Type(() => LocationDto)
   @IsOptional()
   readonly location?: LocationDto;
+
+  @ValidateNested({ each: true })
+  @Type(() => OpeningHoursPerDayDto)
+  @IsArray()
+  @IsOptional()
+  @ArrayMaxSize(7)
+  readonly openingHours?: OpeningHoursPerDayDto[];
+
+  @ValidateNested({ each: true })
+  @Type(() => FacilityDto)
+  @IsArray()
+  @IsOptional()
+  readonly facilities?: FacilityDto[];
 
   @IsBoolean()
   @IsOptional()

@@ -112,7 +112,7 @@ export class AuthService {
     const { email } = data;
 
     try {
-      const user = await this.userModel.findOne({ email });
+      const user = (await this.userModel.findOne({ email }).populate('_id otp email first_name last_name'));
 
       if (!user) {
         throw new NotFoundException('User not found.');
@@ -125,14 +125,14 @@ export class AuthService {
       user.otp = otp;
       await user.save();
 
-      const name = user?.first_name + user?.last_name || 'Sir..';
+      const name = user?.first_name + " " + user?.last_name || 'Sir..';
 
       // Email data
       const emailOptions = {
         name: name,
         email: email,
         subject: 'Password Reset OTP',
-        message: `<p>Your OTP for password reset is: ${otp}</p>`,
+        message: `<p>Your OTP for password reset is: <strong>${otp}</strong></p>`,
       };
 
       // Send OTP via email

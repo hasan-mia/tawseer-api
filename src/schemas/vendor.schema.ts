@@ -3,6 +3,36 @@ import { Document, Model, Types } from 'mongoose';
 import slugify from 'slugify';
 import { v4 as uuidv4 } from 'uuid';
 
+// Define a type for day of the week
+export type DayOfWeek = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
+
+// Define a schema for opening hours per day
+export class OpeningHoursPerDay {
+    @Prop({ required: true })
+    day: DayOfWeek;
+
+    @Prop({ required: true })
+    opens: string; // format: "HH:MM" (24-hour format)
+
+    @Prop({ required: true })
+    closes: string; // format: "HH:MM" (24-hour format)
+
+    @Prop({ type: Boolean, default: true })
+    isOpen: boolean;
+}
+
+// Define a schema for facilities
+export class Facility {
+    @Prop({ required: true })
+    name: string;
+
+    @Prop({ type: String })
+    description: string;
+
+    @Prop({ type: String })
+    icon: string;
+}
+
 @Schema({
     timestamps: true,
 })
@@ -29,7 +59,7 @@ export class Vendor extends Document {
     cover: string;
 
     @Prop({
-        enum: ['salon', 'parlor', 'product'],
+        enum: ['salon', 'parlor', 'shop'],
         required: true,
     })
     type: string;
@@ -54,6 +84,12 @@ export class Vendor extends Document {
         type: string;
         coordinates: number[];
     };
+
+    @Prop({ type: [Object], default: [] })
+    openingHours: OpeningHoursPerDay[];
+
+    @Prop({ type: [Object], default: [] })
+    facilities: Facility[];
 
     @Prop({ type: Boolean, default: false })
     is_deleted: boolean;
