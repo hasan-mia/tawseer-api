@@ -6,6 +6,7 @@ import {
   IsBoolean,
   IsEnum,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsPhoneNumber,
   IsString,
@@ -124,11 +125,24 @@ export class VendorDto {
   @IsOptional()
   readonly facilities?: FacilityDto[];
 
-  @IsBoolean()
+  @IsNumber()
   @IsOptional()
-  readonly is_deleted?: boolean;
+  readonly rating?: number;
+
+  @IsNumber()
+  @IsOptional()
+  readonly queue?: number;
+
+  @IsNumber()
+  @IsOptional()
+  readonly total_review?: number;
 
   @IsBoolean()
   @IsOptional()
   readonly is_disabled?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  readonly is_deleted?: boolean;
+
 }

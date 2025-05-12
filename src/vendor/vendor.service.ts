@@ -32,10 +32,26 @@ export class VendorService {
         throw new BadRequestException('Vendor profile already exists');
       }
 
+      if (data.is_verified) {
+        throw new BadRequestException("You can't update varify status");
+      }
+      if (data.is_disabled) {
+        throw new BadRequestException("You can't update disable status");
+      }
+      if (data.rating) {
+        throw new BadRequestException("You can't update rating manually");
+      }
+      if (data.queue) {
+        throw new BadRequestException("You can't update queue manually");
+      }
+      if (data.total_review) {
+        throw new BadRequestException("You can't update review number manually");
+      }
+
       // const slug = slugify(data.name, { lower: true, strict: true });
 
       const finalData = {
-        vendor: id,
+        user: id,
         ...data,
         // slug,
       };
@@ -62,16 +78,32 @@ export class VendorService {
   async updateVendor(id: string, vendorId: string, data: updateVendor) {
 
     try {
-      const user = await this.userModel.findById(id).exec();
+      const user = await this.userModel.findById(id)
 
       if (!user) {
         throw new NotFoundException('User not found');
       }
 
-      const existVendor = await this.vendorModel.findOne({ _id: vendorId, vendor: id }).exec();
+      const existVendor = await this.vendorModel.findOne({ _id: vendorId, user: id })
 
       if (!existVendor) {
         throw new NotFoundException('Vendor not found');
+      }
+
+      if (data.is_verified) {
+        throw new BadRequestException("You can't update varify status");
+      }
+      if (data.is_disabled) {
+        throw new BadRequestException("You can't update disable status");
+      }
+      if (data.rating) {
+        throw new BadRequestException("You can't update rating manually");
+      }
+      if (data.queue) {
+        throw new BadRequestException("You can't update queue manually");
+      }
+      if (data.total_review) {
+        throw new BadRequestException("You can't update review number manually");
       }
 
       const updatedVendorData = { ...existVendor.toObject(), ...data };
@@ -106,7 +138,7 @@ export class VendorService {
         return cacheData;
       }
 
-      const { keyword, limit, page, vendor } = req.query;
+      const { keyword, limit, page, user, type, longitude, latitude, radiusInMeters = 5000 } = req.query;
 
       let perPage: number | undefined;
 
@@ -123,8 +155,28 @@ export class VendorService {
         ];
       }
 
-      if (vendor) {
-        searchCriteria.vendor = vendor;
+      if (user) {
+        searchCriteria.user = user;
+      }
+
+      if (type) {
+        if (type === 'salon' || type === 'parlor') {
+          searchCriteria.type = { $in: ['salon', 'parlor'] };
+        } else if (type === 'shop') {
+          searchCriteria.type = 'shop';
+        }
+      }
+
+      if (longitude && latitude) {
+        searchCriteria.location = {
+          $near: {
+            $geometry: {
+              type: 'Point',
+              coordinates: [longitude, latitude],
+            },
+            $maxDistance: radiusInMeters,
+          },
+        };
       }
 
       const count = await this.vendorModel.countDocuments(searchCriteria);
@@ -134,7 +186,7 @@ export class VendorService {
 
       const result = await this.vendorModel
         .find(searchCriteria)
-        .populate("vendor", "first_name last_name email mobile")
+        .populate("user", "first_name last_name email mobile avatar")
         .select('-__v')
         .skip(skip)
         .limit(perPage || 10)
@@ -151,9 +203,16 @@ export class VendorService {
         if (keyword) {
           nextUrl += `&keyword=${keyword}`;
         }
-        if (vendor) {
-          nextUrl += `&vendor=${vendor}`;
+        if (user) {
+          nextUrl += `&user=${user}`;
         }
+        if (type) {
+          nextUrl += `&type=${type}`;
+        }
+        if (longitude && latitude) {
+          nextUrl += `&longitude=${longitude}&latitude=${latitude}&radiusInMeters=${radiusInMeters}`;
+        }
+
       }
 
       const data = {
@@ -184,11 +243,11 @@ export class VendorService {
       const cacheKey = `VendorInfo${slug}`;
       const cacheData = await this.redisCacheService.get(cacheKey);
 
-      // if (cacheData) {
-      //   return cacheData;
-      // }
+      if (cacheData) {
+        return cacheData;
+      }
 
-      const data = await this.vendorModel.findOne({ slug }).populate("vendor", "first_name last_name email mobile").exec();
+      const data = await this.vendorModel.findOne({ slug }).populate("user", "first_name last_name email mobile avatar")
 
       if (!data) {
         throw new NotFoundException('Vendor not found');

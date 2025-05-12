@@ -4,6 +4,7 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
+  IsNumber,
   IsOptional,
   IsPhoneNumber,
   IsString,
@@ -120,11 +121,24 @@ export class updateVendor {
   @IsOptional()
   readonly facilities?: FacilityDto[];
 
-  @IsBoolean()
+  @IsNumber()
   @IsOptional()
-  readonly is_deleted?: boolean;
+  readonly rating?: number;
+
+  @IsNumber()
+  @IsOptional()
+  readonly queue?: number;
+
+  @IsNumber()
+  @IsOptional()
+  readonly total_review?: number;
 
   @IsBoolean()
   @IsOptional()
   readonly is_disabled?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  readonly is_deleted?: boolean;
+
 }

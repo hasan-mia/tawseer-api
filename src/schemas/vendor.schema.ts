@@ -41,7 +41,7 @@ export class Vendor extends Document {
     uuid: string;
 
     @Prop({ type: Types.ObjectId, ref: 'User', required: true })
-    vendor: Types.ObjectId;
+    user: Types.ObjectId;
 
     @Prop({ required: true })
     name: string;
@@ -92,10 +92,20 @@ export class Vendor extends Document {
     facilities: Facility[];
 
     @Prop({ type: Boolean, default: false })
-    is_deleted: boolean;
+    is_disabled: boolean;
+
+    @Prop({ required: false, default: 0 })
+    rating: number;
+
+    @Prop({ required: false, default: 0 })
+    queue: number;
+
+    @Prop({ required: false, default: 0 })
+    total_review: number;
 
     @Prop({ type: Boolean, default: false })
-    is_disabled: boolean;
+    is_deleted: boolean;
+
 }
 
 export const VendorSchema = SchemaFactory.createForClass(Vendor);

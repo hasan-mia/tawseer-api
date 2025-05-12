@@ -118,5 +118,6 @@ export class UserDto {
 
   @IsArray()
   @IsOptional()
-  readonly followings?: string[];
+  readonly vendor_following?: string[];
+
 }

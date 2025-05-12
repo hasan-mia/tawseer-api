@@ -109,8 +109,8 @@ export class User extends Document {
   @Prop({ type: [{ type: Types.ObjectId, ref: 'User' }], default: [] })
   followings: string[];
 
-  @Prop({ type: [{ type: Types.ObjectId, ref: 'SalonFollow' }], default: [] })
-  salon_following: string[];
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'VendorFollow' }], default: [] })
+  vendor_following: string[];
 
   @Prop({ type: Boolean, default: false })
   is_deleted: boolean;
