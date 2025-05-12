@@ -16,9 +16,9 @@ import {
 import { RolesGuard } from '@/auth/role.guard';
 import { Roles } from '@/auth/roles.decorator';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
+import { updateVendor } from './dto/updateVendor.dto';
 import { VendorDto } from './dto/vendor.dto';
 import { VendorService } from './vendor.service';
-import { updateVendor } from './dto/updateVendor.dto';
 
 @Controller('vendors')
 export class VendorController {
@@ -26,7 +26,7 @@ export class VendorController {
     private vendorService: VendorService,
   ) { }
 
-  // ======== Update Vendor ========
+  // ======== Create Vendor ========
   @Post('')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('vendor')
@@ -66,6 +66,22 @@ export class VendorController {
     return this.vendorService.getVendorInfo(slug);
   }
 
+  // =================================================//
+  //                  Admin Dashboard                 //
+  // =================================================//
+
+  // ======== Update Vendor By Admin ========
+  @Put('update/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async updateVendorByAdmin(
+    @Body() data: updateVendor, @Request() req) {
+    const vendorId = req.params.id;
+    return this.vendorService.updateVendorByAdmin(vendorId, data);
+
+  }
+
   // ======== Delete Vendor by id ========
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -73,6 +89,49 @@ export class VendorController {
   @HttpCode(HttpStatus.OK)
   async deleteVendor(@Param('id') id: string) {
     return this.vendorService.deleteVendor(id);
+  }
+
+
+  // =================================================//
+  //                  Vendor Following                //
+  // =================================================//
+
+  @Post('follow-unfollow/:vendorId')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async followUnfollowVendor(@Param('vendorId') vendorId: string, @Request() req) {
+    const userId = req.user.id;
+    return this.vendorService.followUnfollow(userId, vendorId);
+  }
+
+  @Get('is-following/:vendorId')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async checkFollow(@Param('vendorId') vendorId: string, @Request() req) {
+    const userId = req.user.id
+    return await this.vendorService.isFollowing(userId, vendorId);
+  }
+
+  @Get('shop/followers/:vendorId')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async getFollowers(@Param('vendorId') vendorId: string, @Request() req) {
+    return await this.vendorService.getFollowers(vendorId, req);
+  }
+
+  @Get('shop/followings')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async getFollowing(@Request() req) {
+    const userId = req.user.id
+    return await this.vendorService.getFollowing(userId, req);
+  }
+
+  @Delete('shop/follower/:id')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async deleteFollower(@Param('id') id: string) {
+    return await this.vendorService.deleteFollower(id);
   }
 
 

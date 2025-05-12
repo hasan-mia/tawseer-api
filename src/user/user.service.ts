@@ -1,4 +1,3 @@
-/* eslint-disable prettier/prettier */
 import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -25,6 +24,22 @@ export class UserService {
         throw new NotFoundException('User not found');
       }
 
+      if (data?.is_verified) {
+        throw new BadRequestException("You can't update varify status");
+      }
+
+      if (data?.point) {
+        throw new BadRequestException("You can't update point");
+      }
+
+      if (data?.subscribe_package) {
+        throw new BadRequestException("You can't update pacakge");
+      }
+
+      if (data?.id_card_verification_status) {
+        throw new BadRequestException("You can't update Id varification status");
+      }
+
       const updatedUserData = { ...user.toObject(), ...data };
 
       const updatedUser = await this.userModel.findByIdAndUpdate(id, updatedUserData, { new: true, upsert: true });
@@ -48,41 +63,6 @@ export class UserService {
       throw new InternalServerErrorException(error.message);
     }
   }
-
-  // ========= Change user role ======
-  async updateUserInfo(id: string, data: UserDto) {
-    try {
-      const user = await this.userModel.findOne({ _id: id }).exec();
-
-      if (!user) {
-        throw new NotFoundException('Use not found');
-      }
-
-      const updatedUserData = { ...user.toObject(), ...data };
-
-      const updatedData = await this.userModel.findByIdAndUpdate(id, updatedUserData, { new: true, upsert: true });
-
-      // remove caching
-      await this.redisCacheService.del('getAllUser');
-      await this.redisCacheService.del(`myInfo${user._id}`);
-      await this.redisCacheService.del(`userInfo${user._id}`);
-
-      const result = {
-        success: true,
-        message: 'Update successfully',
-        data: updatedData
-      }
-
-      return result
-
-    } catch (error) {
-      if (error instanceof BadRequestException || error instanceof NotFoundException) {
-        throw error;
-      }
-      throw new InternalServerErrorException(error.message);
-    }
-  }
-
 
   // ========= Change user Verification status ======
   async changeVerifyStatus(id: string, data: UserDto) {
@@ -197,7 +177,6 @@ export class UserService {
         data: result || [],
         total: count,
         perPage,
-        limit: result.length,
         currentPage,
         totalPages,
         nextPage,
@@ -218,7 +197,6 @@ export class UserService {
 
 
   // ======== Get user info by ID ========
-
   async getUserInfo(id: string) {
     try {
       const cacheKey = `userInfo${id}`;
@@ -251,5 +229,46 @@ export class UserService {
       throw new InternalServerErrorException(error.message);
     }
   }
+
+
+
+  // =================================================//
+  //                  Admin Dashboard                 //
+  // =================================================//
+
+  // ========= Change user info ======
+  async updateUserInfo(id: string, data: UserDto) {
+    try {
+      const user = await this.userModel.findOne({ _id: id }).exec();
+
+      if (!user) {
+        throw new NotFoundException('Use not found');
+      }
+
+      const updatedUserData = { ...user.toObject(), ...data };
+
+      const updatedData = await this.userModel.findByIdAndUpdate(id, updatedUserData, { new: true, upsert: true });
+
+      // remove caching
+      await this.redisCacheService.del('getAllUser');
+      await this.redisCacheService.del(`myInfo${user._id}`);
+      await this.redisCacheService.del(`userInfo${user._id}`);
+
+      const result = {
+        success: true,
+        message: 'Update successfully',
+        data: updatedData
+      }
+
+      return result
+
+    } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(error.message);
+    }
+  }
+
 
 }

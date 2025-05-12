@@ -1,4 +1,3 @@
-/* eslint-disable prettier/prettier */
 import {
   Body,
   Controller,
@@ -24,7 +23,7 @@ export class UserController {
   ) { }
 
   // ======== Update User Profile ========
-  @Put('update-me')
+  @Put('')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.ACCEPTED)
   async updateProfile(
@@ -33,15 +32,6 @@ export class UserController {
     const user = req.user;
     return this.userService.updateProfile(user.id, data);
 
-  }
-
-  // ======== Update user role by admin ========
-  @Put('profile-update/:id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
-  @HttpCode(HttpStatus.ACCEPTED)
-  async updateUserInfo(@Param('id') id: string, @Body() data: UserDto) {
-    return this.userService.updateUserInfo(id, data);
   }
 
   // ======== Get All User ========
@@ -57,4 +47,19 @@ export class UserController {
   async getUserInfo(@Param('id') id: string) {
     return this.userService.getUserInfo(id);
   }
+
+
+  // =================================================//
+  //                  Admin Dashboard                 //
+  // =================================================//
+
+  // ======== Update user info by admin ========
+  @Put('update/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async updateUserInfo(@Param('id') id: string, @Body() data: UserDto) {
+    return this.userService.updateUserInfo(id, data);
+  }
+
 }
