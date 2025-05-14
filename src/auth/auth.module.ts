@@ -1,5 +1,6 @@
 /* eslint-disable prettier/prettier */
 import { RedisCacheService } from '@/rediscloud.service';
+import { VendorSchema } from '@/schemas/vendor.schema';
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
@@ -26,7 +27,7 @@ import { SmsService } from './sms.service';
         };
       },
     }),
-    MongooseModule.forFeature([{ name: 'User', schema: UserSchema }]),
+    MongooseModule.forFeature([{ name: 'User', schema: UserSchema }, { name: 'Vendor', schema: VendorSchema }]),
   ],
   controllers: [AuthController],
   providers: [AuthService, SmsService, JwtStrategy, RedisCacheService, EmailService],

@@ -1,3 +1,4 @@
+import { Vendor } from '@/schemas/vendor.schema';
 import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -10,6 +11,8 @@ export class UserService {
   constructor(
     @InjectModel(User.name)
     private userModel: Model<User>,
+    @InjectModel(Vendor.name)
+    private vendorModel: Model<Vendor>,
     private readonly redisCacheService: RedisCacheService
   ) { }
 
@@ -184,7 +187,7 @@ export class UserService {
       };
 
       // Store in cache
-      await this.redisCacheService.set(cacheKey, data, 1800);
+      await this.redisCacheService.set(cacheKey, data, 120);
 
       return data;
     } catch (error) {
@@ -206,20 +209,30 @@ export class UserService {
         return cacheData;
       }
 
-      const data = await this.userModel.findById(id).exec();
+      const user = await this.userModel.findById(id).exec();
 
-      if (!data) {
-        throw new NotFoundException('Salon not found');
+      if (!user) {
+        throw new NotFoundException('User not found');
       }
 
-      // remove caching
-      await this.redisCacheService.set(cacheKey, data, 1800);
+      let data: any = user.toObject();
+
+      if (user.role === 'vendor') {
+        const vendorInfo = await this.vendorModel.findOne({ user: id }).select('name logo cover type mobile slug')
+        data.vendorInfo = vendorInfo
+      }
+
+
+
 
       const result = {
         success: true,
         message: 'User found successfully',
-        data: data,
+        data,
       };
+
+      // save caching
+      await this.redisCacheService.set(cacheKey, result, 120);
 
       return result;
     } catch (error) {

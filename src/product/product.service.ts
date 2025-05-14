@@ -265,7 +265,7 @@ export class ProductService {
       };
 
       // Cache the result
-      await this.redisCacheService.set(cacheKey, result, 1800);
+      await this.redisCacheService.set(cacheKey, result, 120);
 
       return result;
     } catch (error) {
@@ -395,7 +395,7 @@ export class ProductService {
       };
 
       // Cache the result
-      await this.redisCacheService.set(cacheKey, data, 1800);
+      await this.redisCacheService.set(cacheKey, data, 120);
 
       return data;
     } catch (error) {

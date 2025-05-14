@@ -114,11 +114,12 @@ export class ServiceService {
   // ======== Get all service ========
   async getAllService(req: any) {
     try {
-      const cacheKey = `getAllService:${JSON.stringify(req.query)}`;
+      const cacheKey = `getAllService_${req.user.id}_${JSON.stringify(req.query)}`;
       const cacheData = await this.redisCacheService.get(cacheKey);
-      if (cacheData) {
-        return cacheData;
-      }
+
+      // if (cacheData) {
+      //   return cacheData;
+      // }
 
       const { keyword, price, cat, limit, page } = req.query;
 
@@ -187,7 +188,6 @@ export class ServiceService {
         data: result || [],
         total: count,
         perPage,
-        limit: result.length,
         currentPage,
         totalPages,
         nextPage,
@@ -195,7 +195,7 @@ export class ServiceService {
       };
 
       // Cache the data
-      await this.redisCacheService.set(cacheKey, data, 1800);
+      await this.redisCacheService.set(cacheKey, data, 120);
 
       return data;
     } catch (error) {
@@ -210,6 +210,7 @@ export class ServiceService {
   async getServiceDetails(id: string) {
     try {
       const cacheKey = `serviceDetails${id}`;
+
       const cacheData = await this.redisCacheService.get(cacheKey);
 
       if (cacheData) {
@@ -222,17 +223,17 @@ export class ServiceService {
         .exec();
 
       if (!data) {
-        throw new NotFoundException('Post not found');
+        throw new NotFoundException('Service not found');
       }
-
-      // remove caching
-      await this.redisCacheService.set(cacheKey, data, 1800);
 
       const result = {
         success: true,
-        message: 'Post found successfully',
+        message: 'Service found successfully',
         data: data,
       };
+
+      // save caching
+      await this.redisCacheService.set(cacheKey, result, 120);
 
       return result;
     } catch (error) {
@@ -248,9 +249,10 @@ export class ServiceService {
     try {
       const cacheKey = `getAllService-${id}`;
       const cacheData = await this.redisCacheService.get(cacheKey);
-      // if (cacheData) {
-      //   return cacheData;
-      // }
+
+      if (cacheData) {
+        return cacheData;
+      }
 
       const existVendor = await this.vendorModel.findById(id);
       if (!existVendor) {
@@ -324,7 +326,6 @@ export class ServiceService {
         data: result || [],
         total: count,
         perPage,
-        limit: result.length,
         currentPage,
         totalPages,
         nextPage,
@@ -332,7 +333,7 @@ export class ServiceService {
       };
 
       // Cache the data
-      await this.redisCacheService.set(cacheKey, data, 1800);
+      await this.redisCacheService.set(cacheKey, data, 120);
 
       return data;
     } catch (error) {
@@ -342,5 +343,35 @@ export class ServiceService {
       throw new InternalServerErrorException(error.message);
     }
   }
+
+
+  // ======== Delete service by ID ========
+  async deleteService(id: string, userId: string) {
+    try {
+      const data = await this.serviceModel.findOneAndDelete({ _id: id, user: userId })
+
+      if (!data) {
+        throw new NotFoundException('Service not found');
+      }
+
+      const result = {
+        success: true,
+        message: 'Service delete successfully',
+      };
+
+      // remove caching
+      await this.redisCacheService.del('getAllService');
+      await this.redisCacheService.del(`serviceDetails${id}`);
+      await this.redisCacheService.del(`getAllService-${id}`);
+
+      return result;
+    } catch (error) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(error.message);
+    }
+  }
+
 
 }

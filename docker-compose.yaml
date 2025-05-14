@@ -9,8 +9,8 @@ services:
     environment:
       - NODE_ENV=production
       - DB_URI=mongodb+srv://todo:happy@cluster0.xnn0u.mongodb.net/salon
-      - SERVER_URL=https://api.safeler.com
-      - CLIENT_URL=http://localhost:3000
+      - SERVER_URL=https://salon-nest.onrender.com/tawseer/v1
+      - CLIENT_URL=http://localhost:1200
       - JWT_SECRET=0oxDkrFpnN7WEuuUFOchh98tjwAliS2wbJq7x5tg/5AOF+l#kWlXs$zHxVOls7m31nfZ6LNqm19mdSPg==
       - JWT_SECRET_EXPIRES=30d
       - JWT_REFRESH=098krFptOlQTVWXnDgY8iZLqSSYCEtJ24G7WEuuUFOcAliS2wbJq7x1nfZ6LNqm19mdSPg==

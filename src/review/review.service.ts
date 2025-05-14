@@ -113,7 +113,7 @@ export class ReviewService {
       const nextUrl = nextPage ? `${req.originalUrl.split('?')[0]}?limit=${perPage}&page=${nextPage}` : null;
 
       const response = { success: true, data: result, total: count, perPage, nextPage, nextUrl };
-      await this.redisCacheService.set(cacheKey, response, 1800);
+      await this.redisCacheService.set(cacheKey, response, 120);
       return response;
     } catch (error) {
       if (error instanceof BadRequestException || error instanceof NotFoundException) {
@@ -141,7 +141,7 @@ export class ReviewService {
         data: reviews,
       };
 
-      await this.redisCacheService.set(cacheKey, response, 1800);
+      await this.redisCacheService.set(cacheKey, response, 120);
       return response;
     } catch (error) {
       if (error instanceof BadRequestException || error instanceof NotFoundException) {

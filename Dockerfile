@@ -23,7 +23,7 @@ COPY . .
 RUN nest build
 
 # Expose the port the app runs on
-EXPOSE 3000
+EXPOSE 1200
 
 # Start the application
 CMD ["npm", "run", "start:prod"]

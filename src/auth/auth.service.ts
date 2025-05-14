@@ -1,5 +1,6 @@
 import { generateRandomFourDigitOtp } from '@/helpers/otp.helper';
 import { RedisCacheService } from '@/rediscloud.service';
+import { Vendor } from '@/schemas/vendor.schema';
 import {
   BadRequestException,
   ConflictException,
@@ -27,7 +28,9 @@ export class AuthService {
     private readonly emailService: EmailService,
     private readonly redisCacheService: RedisCacheService,
     @InjectModel(User.name)
-    private userModel: Model<User>
+    private userModel: Model<User>,
+    @InjectModel(Vendor.name)
+    private vendorModel: Model<Vendor>
   ) { }
 
   // =============== Sign up  with email & password=================
@@ -219,12 +222,13 @@ export class AuthService {
     try {
       const cacheKey = `myInfo${id}`;
 
-      // Try to fetch all vehicles from cache
+
       const cachedMyInfo = await this.redisCacheService.get(cacheKey);
+
       if (cachedMyInfo) {
         return { success: true, data: cachedMyInfo };
       }
-      // Check existing USER
+
       const user = await this.userModel
         .findOne({ _id: id })
         .select('-password')
@@ -234,10 +238,16 @@ export class AuthService {
         throw new NotFoundException('User not found');
       }
 
-      // Cache the fetched vehicles data
-      await this.redisCacheService.set(cacheKey, user, 1800);
+      let result: any = user.toObject();
 
-      return { success: true, data: user };
+      if (user.role === 'vendor') {
+        const vendorInfo = await this.vendorModel.findOne({ user: id }).select('name logo cover type mobile slug')
+        result.vendorInfo = vendorInfo
+      }
+
+      await this.redisCacheService.set(cacheKey, user, 120);
+
+      return { success: true, data: result };
     } catch (error) {
       if (error instanceof BadRequestException || error instanceof NotFoundException) {
         throw error;

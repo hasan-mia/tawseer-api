@@ -2,6 +2,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -51,6 +52,16 @@ export class ServiceController {
   async getServiceDetails(@Request() req) {
     const id = req.params.id;
     return this.serviceService.getServiceDetails(id);
+  }
+
+  // ======== Delete service by id ========
+  @Delete(':id')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async deleteService(@Request() req) {
+    const id = req.params.id;
+    const userId = req.user.id;
+    return this.serviceService.deleteService(id, userId);
   }
 
   // ======== Get service details by id ========
