@@ -255,14 +255,14 @@ export class VendorService {
         throw new NotFoundException('Vendor not found');
       }
 
-      // remove caching
-      await this.redisCacheService.set(cacheKey, data, 120);
-
       const result = {
         success: true,
         message: 'Vendor found successfully',
         data: data,
       };
+
+      // set caching
+      await this.redisCacheService.set(cacheKey, result, 120);
 
       return result;
     } catch (error) {
