@@ -34,7 +34,7 @@ export class UploadController {
   async uploadImage(@UploadedFile() image: Express.Multer.File) {
     try {
       const uploadedImage = await this.cloudinaryService.uploadImage(image);
-      return { success: true, data: uploadedImage.url };
+      return { success: true, data: uploadedImage.secure_url };
     } catch (error) {
       return { success: false, error: error.message };
     }
@@ -97,7 +97,7 @@ export class UploadController {
           const result = await this.cloudinaryService.uploadImage(
             files[key][0]
           );
-          data[key] = result.url;
+          data[key] = result.secure_url;
         } else {
           data[key] = null;
         }

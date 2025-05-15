@@ -189,7 +189,7 @@ export class VendorService {
       const result = await this.vendorModel
         .find(searchCriteria)
         .populate("user", "first_name last_name email mobile avatar")
-        .select('slug name logo cover mobile address location rating queue total_review')
+        .select('slug name logo cover mobile address location rating queue total_review type is_verified')
         .skip(skip)
         .limit(perPage || 10)
         .sort({ createdAt: -1 })
