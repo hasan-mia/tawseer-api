@@ -215,7 +215,7 @@ export class CommentService {
         nextUrl,
       };
 
-      await this.redisCacheService.set(cacheKey, data, 120);
+      await this.redisCacheService.set(cacheKey, data, 60);
 
       return data;
     } catch (error) {

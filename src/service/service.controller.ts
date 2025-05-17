@@ -13,6 +13,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 
+import { RolesGuard } from '@/auth/role.guard';
+import { Roles } from '@/auth/roles.decorator';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { ServiceDto, UpdateServiceDto } from './dto/service.dto';
 import { ServiceService } from './service.service';
@@ -23,7 +25,8 @@ export class ServiceController {
 
   // ======== Create service ========
   @Post('')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('vendor', 'admin')
   @HttpCode(HttpStatus.CREATED)
   async createService(@Body() data: ServiceDto, @Request() req) {
     const user = req.user;
@@ -32,7 +35,8 @@ export class ServiceController {
 
   // ======== Update service ========
   @Put(':id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('vendor', 'admin')
   @HttpCode(HttpStatus.ACCEPTED)
   async updateService(@Param('id') id: string, @Body() data: UpdateServiceDto, @Request() req) {
     const user = req.user;

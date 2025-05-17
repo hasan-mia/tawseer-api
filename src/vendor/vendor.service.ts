@@ -228,7 +228,7 @@ export class VendorService {
       };
 
       // Cache the result
-      await this.redisCacheService.set(cacheKey, data, 120);
+      await this.redisCacheService.set(cacheKey, data, 60);
 
       return data;
     } catch (error) {
@@ -262,7 +262,7 @@ export class VendorService {
       };
 
       // set caching
-      await this.redisCacheService.set(cacheKey, result, 120);
+      await this.redisCacheService.set(cacheKey, result, 60);
 
       return result;
     } catch (error) {

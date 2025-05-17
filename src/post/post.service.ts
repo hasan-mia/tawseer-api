@@ -179,7 +179,7 @@ export class PostService {
       };
 
 
-      await this.redisCacheService.set(cacheKey, data, 120);
+      await this.redisCacheService.set(cacheKey, data, 60);
 
       return data;
     } catch (error) {
@@ -213,7 +213,7 @@ export class PostService {
       }
 
       // remove caching
-      await this.redisCacheService.set(cacheKey, data, 120);
+      await this.redisCacheService.set(cacheKey, data, 60);
 
       const result = {
         success: true,
@@ -312,7 +312,7 @@ export class PostService {
       };
 
       // Cache the result for 30 minutes
-      await this.redisCacheService.set(cacheKey, data, 120);
+      await this.redisCacheService.set(cacheKey, data, 60);
 
       return data;
     } catch (error) {
@@ -510,7 +510,7 @@ export class PostService {
       }
 
       // Cache the result for 30 minutes
-      await this.redisCacheService.set(cacheKey, data, 120)
+      await this.redisCacheService.set(cacheKey, data, 60)
 
       return data
     } catch (error) {

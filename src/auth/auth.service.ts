@@ -245,7 +245,7 @@ export class AuthService {
         result.vendorInfo = vendorInfo
       }
 
-      await this.redisCacheService.set(cacheKey, user, 120);
+      await this.redisCacheService.set(cacheKey, user, 60);
 
       return { success: true, data: result };
     } catch (error) {

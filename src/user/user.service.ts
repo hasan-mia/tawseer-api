@@ -187,7 +187,7 @@ export class UserService {
       };
 
       // Store in cache
-      await this.redisCacheService.set(cacheKey, data, 120);
+      await this.redisCacheService.set(cacheKey, data, 60);
 
       return data;
     } catch (error) {
@@ -232,7 +232,7 @@ export class UserService {
       };
 
       // save caching
-      await this.redisCacheService.set(cacheKey, result, 120);
+      await this.redisCacheService.set(cacheKey, result, 60);
 
       return result;
     } catch (error) {

@@ -159,7 +159,7 @@ export class CouponService {
 
       const data = { success: true, data: result, total: count, perPage, limit, nextPage, nextUrl };
 
-      await this.redisCacheService.set(cacheKey, JSON.stringify(data), 120); // Store as JSON
+      await this.redisCacheService.set(cacheKey, JSON.stringify(data), 60); // Store as JSON
 
       return data;
     } catch (error) {

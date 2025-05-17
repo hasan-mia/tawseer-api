@@ -34,7 +34,7 @@ export class ServiceService {
         throw new NotFoundException('User not found');
       }
 
-      const existVendor = await this.vendorModel.findOne({ vendor: id });
+      const existVendor = await this.vendorModel.findOne({ user: id });
 
       if (!existVendor) {
         throw new NotFoundException('Vendor not found');
@@ -114,12 +114,12 @@ export class ServiceService {
   // ======== Get all service ========
   async getAllService(req: any) {
     try {
-      const cacheKey = `getAllService_${req.user.id}_${JSON.stringify(req.query)}`;
+      const cacheKey = `getAllService_${JSON.stringify(req.query)}`;
       const cacheData = await this.redisCacheService.get(cacheKey);
 
-      // if (cacheData) {
-      //   return cacheData;
-      // }
+      if (cacheData) {
+        return cacheData;
+      }
 
       const { keyword, price, cat, limit, page } = req.query;
 
@@ -195,7 +195,7 @@ export class ServiceService {
       };
 
       // Cache the data
-      await this.redisCacheService.set(cacheKey, data, 120);
+      await this.redisCacheService.set(cacheKey, data, 60);
 
       return data;
     } catch (error) {
@@ -233,7 +233,7 @@ export class ServiceService {
       };
 
       // save caching
-      await this.redisCacheService.set(cacheKey, result, 120);
+      await this.redisCacheService.set(cacheKey, result, 60);
 
       return result;
     } catch (error) {
@@ -333,7 +333,7 @@ export class ServiceService {
       };
 
       // Cache the data
-      await this.redisCacheService.set(cacheKey, data, 120);
+      await this.redisCacheService.set(cacheKey, data, 60);
 
       return data;
     } catch (error) {
