@@ -2,34 +2,7 @@ version: '3.8'
 
 services:
   nestjs:
-    container_name: salon-server
-    image: ghcr.io/company/salon-server:latest
+    container_name: tawseer-api
+    image: ghcr.io/company/tawseer-api:latest
     ports:
       - '5006:5000'
-    environment:
-      - NODE_ENV=production
-      - DB_URI=mongodb+srv://todo:happy@cluster0.xnn0u.mongodb.net/salon
-      - SERVER_URL=https://salon-nest.onrender.com/tawseer/v1
-      - CLIENT_URL=http://localhost:1200
-      - JWT_SECRET=0oxDkrFpnN7WEuuUFOchh98tjwAliS2wbJq7x5tg/5AOF+l#kWlXs$zHxVOls7m31nfZ6LNqm19mdSPg==
-      - JWT_SECRET_EXPIRES=30d
-      - JWT_REFRESH=098krFptOlQTVWXnDgY8iZLqSSYCEtJ24G7WEuuUFOcAliS2wbJq7x1nfZ6LNqm19mdSPg==
-      - JWT_REFRESH_EXPIRES=30d
-      - CLOUDINARY_NAME=dkulytwjq
-      - CLOUDINARY_API_KEY=291785548738463
-      - CLOUDINARY_API_SECRET=3ta_BQu-sq9l7E8FQSh3_g_wZLo
-      - STRIPE_API_SECRET_KEY=sk_test_51JUaENSFPqTjbRk3hm8PjhBNMPO9rcyegeGFGNJmkXkAuKik1CbxZw7we8NpYc3w2wInji156Ht9Fj7SOLdwe8kv00WfxzqZwM
-      - STRIPE_WEBHOOK_SECRET=whsec_9c05659c9906a0916013eba6fcca85e2ed86c1772b4dcd5fa1a09cfe3295bad4
-      - REDIS_HOST=redis-12780.c299.asia-northeast1-1.gce.redns.redis-cloud.com
-      - REDIS_PORT=12780
-      - REDIS_PASS=53GZchGmrMTst7uEglVtNlwPoJG3y6pe
-      - SMPT_SERVICE=yahoo
-      - SMPT_HOST=smtp.mail.yahoo.com
-      - SMPT_PORT=465
-      - SMPT_MAIL=hasanrafi69@yahoo.com
-      - SMPT_PASSWORD=pcgbtscjhssnmluh
-      - FCM_SERVER_KEY=key=AAAAQR60ZX0:APA91bFLDan_hqiMi0HWYlr1OxOxfumSKUtKQBylcS3Sap9KzZJ1UjpnbpQHiRB5d5KZPYnnHZRo5WPR3_5YrB8YEkiASA8W6H8BrypzSK3a1m-PsN9fBOAW2wpfbiEy3Z2Y1s_QnLPC
-      - GOOGLE_CLIENT_ID=259331281661-14jks3qs71c27j5h7t2jf7uc6c0d4lm1.apps.googleusercontent.com
-      - GOOGLE_CLIENT_SECRET=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
-      - GOOGLE_REDIRECT_URI=https://api.shothik.ai/api/auth/callback
-      - GOOGLE_GEOLOCATION_KEY=AIzaSyCumDT1p1IsUN05IXtr4Te_NFhMyPuojzM
