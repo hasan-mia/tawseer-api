@@ -5,7 +5,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Vendor } from 'src/schemas/vendor.schema';
 import { User } from '../schemas/user.schema';
-import { updateVendor } from './dto/updateVendor.dto';
+import { DayOfWeek, updateVendor } from './dto/updateVendor.dto';
 import { VendorDto } from './dto/vendor.dto';
 
 @Injectable()
@@ -249,7 +249,7 @@ export class VendorService {
         return cacheData;
       }
 
-      const data = await this.vendorModel.findOne({ slug }).populate("user", "first_name last_name email mobile avatar")
+      const data = await this.vendorModel.findOne({ slug }).populate("user", "first_name last_name email mobile avatar username").exec();
 
       if (!data) {
         throw new NotFoundException('Vendor not found');
@@ -271,6 +271,84 @@ export class VendorService {
       }
       throw new InternalServerErrorException(error.message);
     }
+  }
+
+  // ======== Find nearby vendors ========
+  async findNearbyVendors(
+    latitude: number,
+    longitude: number,
+    radius: number = 5000,
+    type?: string,
+    limit: number = 20,
+  ) {
+    const query: any = {
+      location: {
+        $near: {
+          $geometry: {
+            type: 'Point',
+            coordinates: [longitude, latitude], // MongoDB uses [lng, lat]
+          },
+          $maxDistance: radius, // in meters
+        },
+      },
+      is_deleted: false,
+      is_disabled: false,
+    };
+
+    if (type) {
+      query.type = type;
+    }
+
+    return this.vendorModel
+      .find(query)
+      .limit(limit)
+      .populate('user', 'first_name last_name email mobile avatar username')
+      .exec();
+  }
+
+  isVendorOpen(vendor: Vendor): boolean {
+    const now = new Date();
+    const currentDay = now.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase().slice(0, 3) as DayOfWeek;
+    const currentTime = now.toTimeString().slice(0, 5); // HH:MM format
+
+    const todayHours = vendor.openingHours.find(
+      hours => hours.day === currentDay && hours.isOpen
+    );
+
+    if (!todayHours) return false;
+
+    return currentTime >= todayHours.opens && currentTime <= todayHours.closes;
+  }
+
+  async updateVendorLocation(vendorId: string, latitude: number, longitude: number) {
+    return this.vendorModel.findByIdAndUpdate(
+      vendorId,
+      {
+        location: {
+          type: 'Point',
+          coordinates: [longitude, latitude],
+        },
+      },
+      { new: true },
+    );
+  }
+
+  async getVendorsByBounds(
+    northEast: { lat: number; lng: number },
+    southWest: { lat: number; lng: number },
+  ) {
+    return this.vendorModel.find({
+      location: {
+        $geoWithin: {
+          $box: [
+            [southWest.lng, southWest.lat],
+            [northEast.lng, northEast.lat],
+          ],
+        },
+      },
+      is_deleted: false,
+      is_disabled: false,
+    });
   }
 
   // =================================================//

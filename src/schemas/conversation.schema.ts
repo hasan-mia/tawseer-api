@@ -12,6 +12,12 @@ export class Conversation extends Document {
     @Prop({ type: [{ type: Types.ObjectId, ref: 'User' }], required: true })
     participants: Types.ObjectId[];
 
+    @Prop({ default: false })
+    is_group: boolean;
+
+    @Prop()
+    group_name?: string;
+
     @Prop({ type: Types.ObjectId, ref: 'Message' })
     last_message: Types.ObjectId;
 

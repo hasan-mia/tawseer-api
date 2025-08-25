@@ -9,11 +9,11 @@ export class Message extends Document {
     @Prop({ default: () => uuidv4() })
     uuid: string;
 
-    @Prop({ type: Types.ObjectId, ref: 'User', required: true })
-    sender: Types.ObjectId;
+    @Prop({ type: Types.ObjectId, ref: 'Conversation', required: true })
+    conversation: Types.ObjectId;
 
     @Prop({ type: Types.ObjectId, ref: 'User', required: true })
-    receiver: Types.ObjectId;
+    sender: Types.ObjectId;
 
     @Prop({ required: true })
     content: string;
@@ -33,5 +33,6 @@ export class Message extends Document {
     @Prop({ type: Boolean, default: false })
     is_deleted: boolean;
 }
+
 
 export const MessageSchema = SchemaFactory.createForClass(Message);

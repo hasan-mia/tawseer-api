@@ -42,11 +42,11 @@ export class MessageService {
   }
 
   async sendMessage(createMessageDto: CreateMessageDto): Promise<Message> {
-    const { senderId, receiverId, content, attachments } = createMessageDto;
+    const { senderId, conversationId, content, attachments } = createMessageDto;
 
     // Validate that both users exist
     const sender = await this.userModel.findById(senderId);
-    const receiver = await this.userModel.findById(receiverId);
+    const receiver = await this.userModel.findById(conversationId);
 
     if (!sender || !receiver) {
       throw new NotFoundException('Sender or receiver not found');
@@ -54,13 +54,13 @@ export class MessageService {
 
     // Find or create a conversation between these users
     const conversation = await this.findOrCreateConversation([
-      senderId, receiverId
+      senderId, conversationId
     ]);
 
     // Create the new message
     const newMessage = await this.messageModel.create({
       sender: senderId,
-      receiver: receiverId,
+      receiver: conversationId,
       content,
       attachments: attachments || [],
     });
@@ -209,7 +209,7 @@ export class MessageService {
 
     // Find the conversation this message belongs to
     const conversation = await this.conversationModel.findOne({
-      participants: { $all: [message.sender, message.receiver] }
+      participants: { $all: [message.sender] }
     });
 
     if (conversation) {

@@ -8,7 +8,7 @@ export class CreateMessageDto {
 
   @IsNotEmpty()
   @IsMongoId()
-  receiverId: Types.ObjectId;
+  conversationId: Types.ObjectId;
 
   @IsNotEmpty()
   @IsString()

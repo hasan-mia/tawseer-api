@@ -111,7 +111,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     async handleSendMessage(
         @ConnectedSocket() socket: Socket,
         @MessageBody() data: {
-            receiverId: string,
+            conversationId: string,
             content: string,
             attachments?: string[]
         }
@@ -123,12 +123,12 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
             const payload = this.jwtService.verify(token);
             const senderId = payload.sub || payload._id;
 
-            const { receiverId, content, attachments } = data;
+            const { conversationId, content, attachments } = data;
 
             // Save message to database
             const message = await this.messageService.sendMessage({
                 senderId: new Types.ObjectId(senderId),
-                receiverId: new Types.ObjectId(receiverId),
+                conversationId: new Types.ObjectId(conversationId),
                 content,
                 attachments
             });
@@ -136,10 +136,8 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
             // Get conversation to which this message belongs
             const conversation = await this.messageService.findOrCreateConversation([
                 new Types.ObjectId(senderId),
-                new Types.ObjectId(receiverId)
+                new Types.ObjectId(conversationId)
             ]);
-
-            const conversationId = conversation._id.toString();
 
             // Emit to the conversation room
             this.server.to(`conversation:${conversationId}`).emit('new-message', {
@@ -148,9 +146,9 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
             });
 
             // If the receiver is not in the conversation room, send a notification to their personal room
-            const receiverSocketId = this.connectedUsers.get(receiverId);
+            const receiverSocketId = this.connectedUsers.get(conversationId);
             if (receiverSocketId) {
-                this.server.to(`user:${receiverId}`).emit('message-notification', {
+                this.server.to(`user:${conversationId}`).emit('message-notification', {
                     message,
                     conversationId
                 });

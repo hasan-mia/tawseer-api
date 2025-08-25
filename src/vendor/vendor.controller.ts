@@ -9,6 +9,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
   Request,
   UseGuards
 } from '@nestjs/common';
@@ -64,6 +65,57 @@ export class VendorController {
   @HttpCode(HttpStatus.OK)
   async getVendorInfo(@Param('slug') slug: string) {
     return this.vendorService.getVendorInfo(slug);
+  }
+
+  // ======== Find nearby vendors ========
+  @Get('nearby')
+  async getNearbyVendors(
+    @Query('latitude') latitude: number,
+    @Query('longitude') longitude: number,
+    @Query('radius') radius: number = 5000,
+    @Query('type') type?: string,
+    @Query('limit') limit: number = 20,
+  ) {
+    return this.vendorService.findNearbyVendors(
+      latitude,
+      longitude,
+      radius,
+      type,
+      limit,
+    );
+  }
+
+  // ======== Find nearby vendors by map data========
+  @Get('map-data')
+  async getMapData(
+    @Query('latitude') latitude: number,
+    @Query('longitude') longitude: number,
+    @Query('radius') radius: number = 10000,
+  ) {
+    const vendors = await this.vendorService.findNearbyVendors(
+      latitude,
+      longitude,
+      radius,
+    );
+
+    return {
+      center: { latitude, longitude },
+      vendors: vendors.map(vendor => ({
+        id: vendor._id,
+        uuid: vendor.uuid,
+        name: vendor.name,
+        type: vendor.type,
+        address: vendor.address,
+        rating: vendor.rating,
+        coordinates: {
+          latitude: vendor.location.coordinates[1],
+          longitude: vendor.location.coordinates[0],
+        },
+        logo: vendor.logo,
+        isOpen: this.vendorService.isVendorOpen(vendor),
+        queue: vendor.queue,
+      })),
+    };
   }
 
   // =================================================//
