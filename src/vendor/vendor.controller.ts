@@ -9,7 +9,6 @@ import {
   Param,
   Post,
   Put,
-  Query,
   Request,
   UseGuards
 } from '@nestjs/common';
@@ -69,34 +68,20 @@ export class VendorController {
 
   // ======== Find nearby vendors ========
   @Get('nearby')
-  async getNearbyVendors(
-    @Query('latitude') latitude: number,
-    @Query('longitude') longitude: number,
-    @Query('radius') radius: number = 5000,
-    @Query('type') type?: string,
-    @Query('limit') limit: number = 20,
-  ) {
-    return this.vendorService.findNearbyVendors(
-      latitude,
-      longitude,
-      radius,
-      type,
-      limit,
-    );
+  @HttpCode(HttpStatus.OK)
+  async getNearbyVendors(@Request() req) {
+    return "ok";
+    return this.vendorService.findNearbyVendors(req);
   }
 
   // ======== Find nearby vendors by map data========
   @Get('map-data')
-  async getMapData(
-    @Query('latitude') latitude: number,
-    @Query('longitude') longitude: number,
-    @Query('radius') radius: number = 10000,
-  ) {
-    const vendors = await this.vendorService.findNearbyVendors(
-      latitude,
-      longitude,
-      radius,
-    );
+  @HttpCode(HttpStatus.OK)
+  async getMapData(@Request() req) {
+    return "ok";
+    const { latitude, longitude, radius = 5000 } = req.query;
+
+    const vendors = await this.vendorService.findNearbyVendors(req);
 
     return {
       center: { latitude, longitude },

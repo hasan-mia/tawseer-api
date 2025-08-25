@@ -134,21 +134,33 @@ export class VendorService {
   // ======== Get All Vendor ========
   async getAllVendor(req: any) {
     try {
-      const cacheKey = 'getAllVendor';
+      const {
+        keyword,
+        limit,
+        page,
+        user,
+        type,
+        longitude,
+        latitude,
+        radiusInMeters = 5000
+      } = req.query;
+
+      const cacheKey = `getAllVendor`;
+
       const cacheData = await this.redisCacheService.get(cacheKey);
       if (cacheData) {
         return cacheData;
       }
 
-      const { keyword, limit, page, user, type, longitude, latitude, radiusInMeters = 5000 } = req.query;
-
       let perPage: number | undefined;
-
       if (limit && typeof limit === 'string') {
         perPage = parseInt(limit, 10);
       }
 
-      const searchCriteria: any = {};
+      const searchCriteria: any = {
+        is_deleted: { $ne: true },
+        is_disabled: { $ne: true },
+      };
 
       if (keyword) {
         searchCriteria.$or = [
@@ -169,25 +181,48 @@ export class VendorService {
         }
       }
 
-      if (longitude && latitude) {
-        searchCriteria.location = {
-          $near: {
-            $geometry: {
-              type: 'Point',
-              coordinates: [longitude, latitude],
-            },
-            $maxDistance: radiusInMeters,
-          },
-        };
-      }
+      let query;
+      let count;
 
-      const count = await this.vendorModel.countDocuments(searchCriteria);
+      // Handle location-based queries differently
+      if (longitude && latitude) {
+        const parsedLongitude = parseFloat(longitude);
+        const parsedLatitude = parseFloat(latitude);
+        const parsedRadius = parseInt(radiusInMeters, 10);
+
+        // For location queries, we need to use .find() with $near
+        query = this.vendorModel.find({
+          ...searchCriteria,
+          location: {
+            $near: {
+              $geometry: {
+                type: 'Point',
+                coordinates: [parsedLongitude, parsedLatitude],
+              },
+              $maxDistance: parsedRadius,
+            },
+          },
+        });
+
+        // For count with location, we need to use $geoWithin (approximate count)
+        count = await this.vendorModel.countDocuments({
+          ...searchCriteria,
+          location: {
+            $geoWithin: {
+              $centerSphere: [[parsedLongitude, parsedLatitude], parsedRadius / 6378100]
+            }
+          }
+        });
+      } else {
+        // Regular query without location
+        query = this.vendorModel.find(searchCriteria);
+        count = await this.vendorModel.countDocuments(searchCriteria);
+      }
 
       const currentPage = page ? parseInt(page as string, 10) : 1;
       const skip = perPage ? perPage * (currentPage - 1) : 0;
 
-      const result = await this.vendorModel
-        .find(searchCriteria)
+      const result = await query
         .populate("user", "first_name last_name email mobile avatar")
         .select('slug name logo cover mobile address location rating queue total_review type is_verified')
         .skip(skip)
@@ -201,20 +236,9 @@ export class VendorService {
 
       if (perPage && currentPage < totalPages) {
         nextPage = currentPage + 1;
-        nextUrl = `${req.originalUrl.split('?')[0]}?limit=${perPage}&page=${nextPage}`;
-        if (keyword) {
-          nextUrl += `&keyword=${keyword}`;
-        }
-        if (user) {
-          nextUrl += `&user=${user}`;
-        }
-        if (type) {
-          nextUrl += `&type=${type}`;
-        }
-        if (longitude && latitude) {
-          nextUrl += `&longitude=${longitude}&latitude=${latitude}&radiusInMeters=${radiusInMeters}`;
-        }
-
+        const params = new URLSearchParams(req.query);
+        params.set('page', nextPage.toString());
+        nextUrl = `${req.originalUrl.split('?')[0]}?${params.toString()}`;
       }
 
       const data = {
@@ -228,10 +252,12 @@ export class VendorService {
       };
 
       // Cache the result
-      await this.redisCacheService.set(cacheKey, data, 60);
+      const cacheTTL = (longitude && latitude) ? 30 : 300; // Shorter TTL for location queries
+      await this.redisCacheService.set(cacheKey, data, cacheTTL);
 
       return data;
     } catch (error) {
+      console.error('Error in getAllVendor:', error);
       if (error instanceof BadRequestException || error instanceof NotFoundException) {
         throw error;
       }
@@ -274,19 +300,20 @@ export class VendorService {
   }
 
   // ======== Find nearby vendors ========
-  async findNearbyVendors(
-    latitude: number,
-    longitude: number,
-    radius: number = 5000,
-    type?: string,
-    limit: number = 20,
-  ) {
+  async findNearbyVendors(req: any) {
+
+    const { limit, type, longitude, latitude, radius = 5000 } = req.query;
+
+    if (!latitude || !longitude) {
+      throw new BadRequestException('Latitude and longitude are required');
+    }
+
     const query: any = {
       location: {
         $near: {
           $geometry: {
             type: 'Point',
-            coordinates: [longitude, latitude], // MongoDB uses [lng, lat]
+            coordinates: [91.825, 22.3569] // MongoDB uses [lng, lat]
           },
           $maxDistance: radius, // in meters
         },
