@@ -1,31 +1,60 @@
+import { Appointment } from '@/schemas/appointment.schema';
 import {
-  Body,
   Controller,
-  HttpCode,
-  HttpException,
-  HttpStatus,
+  Headers,
   Post,
-  Request,
-  UseGuards,
+  RawBody,
+  Req,
+  Res
 } from '@nestjs/common';
-import {JwtAuthGuard} from 'src/auth/jwt-auth.guard';
-import {StripePaymentDto} from './dto/stripepayment.dto';
-import {StripeService} from './stripe.service';
+import { InjectModel } from '@nestjs/mongoose';
+import { Request, Response } from 'express';
+import { Model } from 'mongoose';
+import Stripe from 'stripe';
 
-@Controller('car-wash/stripe')
+@Controller('stripe')
 export class StripeController {
-  constructor(private readonly stripeService: StripeService) {}
+  private readonly stripe: Stripe;
 
-  @Post('payment')
-  @HttpCode(HttpStatus.CREATED)
-  @UseGuards(JwtAuthGuard)
-  async createPayment(@Body() data: StripePaymentDto, @Request() req) {
-    const user = req.user;
+  constructor(
+    @InjectModel(Appointment.name)
+    private appointmentModel: Model<Appointment>,
+  ) {
+    this.stripe = new Stripe(process.env.STRIPE_API_SECRET_KEY, {
+      apiVersion: '2025-02-24.acacia',
+    });
+  }
+
+  @Post('webhook')
+  async handleStripeWebhook(
+    @Req() req: Request,
+    @Res() res: Response,
+    @RawBody() rawBody: Buffer,
+    @Headers('stripe-signature') signature: string
+  ) {
+    let event: Stripe.Event;
 
     try {
-      return await this.stripeService.processPayment(user.id, data);
-    } catch (error) {
-      throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
+      event = this.stripe.webhooks.constructEvent(
+        rawBody,
+        signature,
+        process.env.STRIPE_WEBHOOK_SECRET,
+      );
+    } catch (err) {
+      return res.status(400).send(`Webhook Error: ${err.message}`);
     }
+
+    if (event.type === 'payment_intent.succeeded') {
+      const paymentIntent = event.data.object as Stripe.PaymentIntent;
+      const appointmentId = paymentIntent.metadata.appointmentId;
+
+      // Update Appointment
+      await this.appointmentModel.findByIdAndUpdate(appointmentId, {
+        status: 'confirm',
+        payment_status: "success"
+      });
+    }
+
+    res.json({ received: true });
   }
 }

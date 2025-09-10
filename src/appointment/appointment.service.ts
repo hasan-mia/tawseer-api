@@ -1,4 +1,6 @@
 /* eslint-disable prettier/prettier */
+import { StripeService } from '@/payment/stripe.service';
+import { TransactionService } from '@/payment/transaction.service';
 import { Appointment } from '@/schemas/appointment.schema';
 import {
   Injectable,
@@ -22,50 +24,72 @@ export class AppointmentService {
     private serviceModel: Model<Service>,
     @InjectModel(Appointment.name)
     private appointmentModel: Model<Appointment>,
-    private readonly redisCacheService: RedisCacheService
+    private readonly redisCacheService: RedisCacheService,
+    private readonly stripeService: StripeService,
+    private readonly transactionService: TransactionService
   ) { }
 
-  // ======== Create new appointment / order ========
+  // ======== Create new appointment / booking ========
   async createAppointment(userId: string, serviceId: string, data: AppointmentDto) {
     try {
       const user = await this.userModel.findById(userId).exec();
+      if (!user) throw new NotFoundException('User not found');
 
-      if (!user) {
-        throw new NotFoundException('User not found');
-      }
+      const service = await this.serviceModel.findById(serviceId).exec();
+      if (!service) throw new NotFoundException('Service not found');
 
-      const service = await this.serviceModel.findOne({ _id: serviceId }).exec();
-
-      if (!service) {
-        throw new NotFoundException('service not found');
-      }
-
-      const finalData = {
+      const saveData = {
         user: userId,
-        service: service._id,
+        service: serviceId,
         vendor: service.vendor,
+        status: 'pending',
+        payment_status: "pending",
+        price: service.price,
         ...data,
-      };
+      }
 
-      const saveData = await this.appointmentModel.create(finalData);
 
-      // remove caching
-      await this.redisCacheService.del('getAllAppointment');
-      await this.redisCacheService.del(`getAllSalonAppointment${service.vendor}`);
-      await this.redisCacheService.del(`getConfirmSalonAppointment${service.vendor}`);
-      await this.redisCacheService.del(`getAllUserAppointment${userId}`);
+      const appointment = await this.appointmentModel.create(saveData);
 
-      const result = {
+      // Create Stripe PaymentIntent
+      const payment = await this.stripeService.createBookingPayment(
+        appointment._id.toString(),
+        service.price,
+        userId,
+        serviceId,
+        service.name
+      );
+
+      if (!payment && payment.clientSecret) throw new NotFoundException('Failed to create payment');
+
+      const amount = Number(service.price) + Number(appointment.discount || 0) + Number(appointment.tax || 0)
+
+      const transaction = await this.transactionService.createTransaction({
+        user: userId,
+        vendor: service.vendor.toString(),
+        type: 'appointment',
+        payment_method: 'stripe',
+        referenceType: 'Appointment',
+        referenceId: appointment._id.toString(),
+        amount,
+        currency: 'USD',
+        country: 'US',
+      });
+
+      return {
         success: true,
-        message: 'Create successfully',
-        data: saveData,
+        message: 'Appointment created successfully',
+        data: {
+          appointmentId: appointment._id,
+          clientSecret: payment.clientSecret,
+          transaction,
+        }
       };
-
-      return result;
     } catch (error) {
       throw new InternalServerErrorException(error.message);
     }
   }
+
 
   // ======== Update appointment / order ========
   async updateAppointment(userId: string, appointmentId: string, data: AppointmentDto) {

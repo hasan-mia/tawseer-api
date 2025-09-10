@@ -1,19 +1,23 @@
-import {IsNotEmpty, IsNumber, IsOptional, IsString} from 'class-validator';
+import { IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
 
 export class StripePaymentDto {
   @IsNotEmpty()
   @IsNumber()
   amount: number;
 
+  @IsOptional()
+  @IsString()
+  currency?: string;
+
   @IsNotEmpty()
   @IsString()
-  currency: string;
+  appointmentId: string;
 
-  @IsOptional()
+  @IsNotEmpty()
   @IsString()
-  payment_method?: string;
+  userId: string;
 
-  @IsOptional()
+  @IsNotEmpty()
   @IsString()
-  description?: string;
+  serviceId: string;
 }

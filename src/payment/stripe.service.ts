@@ -1,6 +1,8 @@
+/* eslint-disable prettier/prettier */
+import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import Stripe from 'stripe';
-import { StripePaymentDto } from './dto/stripepayment.dto';
 
+@Injectable()
 export class StripeService {
   private readonly stripe: Stripe;
 
@@ -10,37 +12,26 @@ export class StripeService {
     });
   }
 
-  async processPayment(id: string, data: StripePaymentDto): Promise<any> {
+  async createBookingPayment(appointmentId: string, amount: number, userId: string, serviceId: string, name?: string) {
     try {
-      // Use Stripe to create a payment
-      const paymentIntent = await this.stripe.paymentIntents.create(data);
+      const paymentIntent = await this.stripe.paymentIntents.create({
+        amount: Math.round(amount * 100),
+        currency: 'usd',
+        description: `Purchase of ${name}`,
+        payment_method_types: ['card'],
+        metadata: {
+          appointmentId,
+          userId,
+          serviceId,
+        },
+      });
 
-      return paymentIntent;
-      // Use Stripe to create an invoice item
-
-      //   const invoiceItemData = {
-      //     ...data,
-      //     customer: id,
-      //   };
-      //   const invoiceItem =
-      //     await this.stripe.invoiceItems.create(invoiceItemData);
-
-      //   // Use Stripe to create an invoice
-      //   const invoiceData = {
-      //     ...data,
-      //     customer: id,
-      //     payment_intent: paymentIntent.id,
-      //     auto_advance: true,
-      //   };
-      //   const invoice = await this.stripe.invoices.create(invoiceData);
-
-      //   // Return both the payment intent and the invoice object
-      //   return { paymentIntent, invoice, invoiceItem };
-
-      // Return the payment intent object
-      return paymentIntent;
+      return {
+        clientSecret: paymentIntent.client_secret,
+        paymentIntentId: paymentIntent.id,
+      };
     } catch (error) {
-      throw new Error(`Failed to process payment: ${error.message}`);
+      throw new InternalServerErrorException(`Failed to create payment: ${error.message}`);
     }
   }
 }

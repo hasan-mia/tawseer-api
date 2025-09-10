@@ -28,11 +28,24 @@ export class Appointment extends Document {
   })
   status: string
 
+  @Prop({
+    enum: ['pending', 'processing', 'success', 'refund'],
+    required: true,
+    default: 'pending',
+  })
+  payment_status: string
+
   @Prop({ type: Number, required: true })
   price: number
 
-  @Prop({ type: Number, required: false })
+  @Prop({ type: Number, required: true, default: 0 })
+  tax: number
+
+  @Prop({ type: Number, required: false, default: 0 })
   discount: number
+
+  @Prop({ type: Types.ObjectId, ref: 'Coupon', required: false })
+  coupon?: Types.ObjectId;
 
   @Prop({ type: Number, required: false })
   chargeAmount: number;

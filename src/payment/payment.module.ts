@@ -1,11 +1,20 @@
-import {Module} from '@nestjs/common';
-import {StripeController} from './ stripe.controller';
-import {StripeService} from './stripe.service';
+import { AppointmentSchema } from '@/schemas/appointment.schema';
+import { TransactionSchema } from '@/schemas/transaction.schema';
+import { Module } from '@nestjs/common';
+import { MongooseModule } from '@nestjs/mongoose';
+import { StripeController } from './ stripe.controller';
+import { StripeService } from './stripe.service';
+import { TransactionService } from './transaction.service';
 
 @Module({
-  imports: [],
+  imports: [
+    MongooseModule.forFeature([
+      { name: 'Appointment', schema: AppointmentSchema },
+      { name: 'Transaction', schema: TransactionSchema },
+    ]),
+  ],
   controllers: [StripeController],
-  providers: [StripeService],
-  exports: [StripeService],
+  providers: [StripeService, TransactionService],
+  exports: [StripeService, TransactionService],
 })
-export class PaymentModule {}
+export class PaymentModule { }

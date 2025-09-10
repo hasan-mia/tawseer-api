@@ -73,7 +73,7 @@ export class Transaction extends Document {
   })
   payment_method: string;
 
-  @Prop({ type: Types.ObjectId, ref: 'Vendor' })
+  @Prop({ type: Types.ObjectId, ref: 'Vendor', })
   vendor: Types.ObjectId;
 
   @Prop({

@@ -5,9 +5,9 @@ import {
   Get,
   HttpCode,
   HttpStatus,
-  Put,
+  Post,
   Request,
-  UseGuards,
+  UseGuards
 } from '@nestjs/common';
 
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
@@ -19,23 +19,13 @@ export class AppointmentController {
   constructor(private appointmentService: AppointmentService) { }
 
   // ======== Create appointment ========
-  @Put('create')
+  @Post(':id')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.CREATED)
   async createAppointment(@Body() data: AppointmentDto, @Request() req) {
     const userId = req.user.id;
     const serviceId = req.params.id;
     return this.appointmentService.createAppointment(userId, serviceId, data);
-  }
-
-  // ======== Update appointment ========
-  @Put('update/:id')
-  @UseGuards(JwtAuthGuard)
-  @HttpCode(HttpStatus.ACCEPTED)
-  async updateAppointment(@Body() data: AppointmentDto, @Request() req) {
-    const userId = req.user.id;
-    const appointmentId = req.params.id;
-    return this.appointmentService.updateAppointment(userId, appointmentId, data);
   }
 
   // ======== Get all appointment ========
