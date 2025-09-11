@@ -51,16 +51,21 @@ export class AppointmentService {
 
       const appointment = await this.appointmentModel.create(saveData);
 
-      // Create Stripe PaymentIntent
-      const payment = await this.stripeService.createBookingPayment(
-        appointment._id.toString(),
-        service.price,
-        userId,
-        serviceId,
-        service.name
-      );
+      let payment = null;
 
-      if (!payment && payment.clientSecret) throw new NotFoundException('Failed to create payment');
+      if (data.payment_method == "stripe") {
+        // Create Stripe PaymentIntent
+        payment = await this.stripeService.createBookingPayment(
+          appointment._id.toString(),
+          service.price,
+          userId,
+          serviceId,
+          service.name
+        );
+        if (!payment && payment.clientSecret) throw new NotFoundException('Failed to create payment');
+      }
+
+
 
       const amount = Number(service.price) + Number(appointment.discount || 0) + Number(appointment.tax || 0)
 
@@ -68,7 +73,7 @@ export class AppointmentService {
         user: userId,
         vendor: service.vendor.toString(),
         type: 'appointment',
-        payment_method: 'stripe',
+        payment_method: data.payment_method,
         referenceType: 'Appointment',
         referenceId: appointment._id.toString(),
         amount,
@@ -81,8 +86,9 @@ export class AppointmentService {
         message: 'Appointment created successfully',
         data: {
           appointmentId: appointment._id,
-          clientSecret: payment.clientSecret,
-          transaction,
+          trxID: transaction.trxID,
+          payment_method: data.payment_method,
+          clientSecret: payment ? payment.clientSecret : null,
         }
       };
     } catch (error) {

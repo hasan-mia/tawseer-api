@@ -35,6 +35,13 @@ export class Appointment extends Document {
   })
   payment_status: string
 
+  @Prop({
+    enum: ['cash_on', 'stripe', 'paypal', 'bkash', 'nagad', 'paytm', 'bank_transfer', 'wallet'],
+    required: true,
+    default: 'cash_on',
+  })
+  payment_method: string;
+
   @Prop({ type: Number, required: true })
   price: number
 
