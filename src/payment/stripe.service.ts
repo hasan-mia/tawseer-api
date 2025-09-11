@@ -41,6 +41,7 @@ export class StripeService {
         paymentIntentId: paymentIntent.id,
         ephemeralKey: ephemeralKey.secret,
         customer: customer.id,
+        publishableKey: process.env.STRIPE_PUBLISHER_KEY,
       };
     } catch (error) {
       throw new InternalServerErrorException(`Failed to create payment: ${error.message}`);

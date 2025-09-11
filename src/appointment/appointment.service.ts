@@ -55,6 +55,7 @@ export class AppointmentService {
         ephemeralKey: string;
         customer: string;
         paymentIntentId: string;
+        publishableKey: string;
       } | null = null;
 
       if (data.payment_method === 'stripe') {
@@ -98,6 +99,7 @@ export class AppointmentService {
           clientSecret: payment?.clientSecret || null,
           ephemeralKey: payment?.ephemeralKey || null,
           customer: payment?.customer || null,
+          publishableKey: payment?.publishableKey || null,
         },
       };
     } catch (error) {
