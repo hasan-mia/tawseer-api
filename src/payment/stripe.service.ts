@@ -14,11 +14,21 @@ export class StripeService {
 
   async createBookingPayment(appointmentId: string, amount: number, userId: string, serviceId: string, name?: string) {
     try {
+
+      const customer = await this.stripe.customers.create();
+
+      const ephemeralKey = await this.stripe.ephemeralKeys.create(
+        { customer: customer.id },
+        { apiVersion: '2025-02-24.acacia' }
+      );
+
       const paymentIntent = await this.stripe.paymentIntents.create({
         amount: Math.round(amount * 100),
         currency: 'usd',
         description: `Purchase of ${name}`,
-        payment_method_types: ['card'],
+        // payment_method_types: ['card'],
+        customer: customer.id,
+        automatic_payment_methods: { enabled: true },
         metadata: {
           appointmentId,
           userId,
@@ -29,6 +39,8 @@ export class StripeService {
       return {
         clientSecret: paymentIntent.client_secret,
         paymentIntentId: paymentIntent.id,
+        ephemeralKey: ephemeralKey.secret,
+        customer: customer.id,
       };
     } catch (error) {
       throw new InternalServerErrorException(`Failed to create payment: ${error.message}`);

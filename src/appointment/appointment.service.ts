@@ -43,31 +43,38 @@ export class AppointmentService {
         service: serviceId,
         vendor: service.vendor,
         status: 'pending',
-        payment_status: "pending",
+        payment_status: 'pending',
         price: service.price,
         ...data,
-      }
-
+      };
 
       const appointment = await this.appointmentModel.create(saveData);
 
-      let payment = null;
+      let payment: {
+        clientSecret: string;
+        ephemeralKey: string;
+        customer: string;
+        paymentIntentId: string;
+      } | null = null;
 
-      if (data.payment_method == "stripe") {
-        // Create Stripe PaymentIntent
+      if (data.payment_method === 'stripe') {
         payment = await this.stripeService.createBookingPayment(
           appointment._id.toString(),
           service.price,
           userId,
           serviceId,
-          service.name
+          service.name,
         );
-        if (!payment && payment.clientSecret) throw new NotFoundException('Failed to create payment');
+
+        if (!payment || !payment.clientSecret) {
+          throw new InternalServerErrorException('Failed to create Stripe payment');
+        }
       }
 
-
-
-      const amount = Number(service.price) + Number(appointment.discount || 0) + Number(appointment.tax || 0)
+      const amount =
+        Number(service.price) +
+        Number(appointment.discount || 0) +
+        Number(appointment.tax || 0);
 
       const transaction = await this.transactionService.createTransaction({
         user: userId,
@@ -88,8 +95,10 @@ export class AppointmentService {
           appointmentId: appointment._id,
           trxID: transaction.trxID,
           payment_method: data.payment_method,
-          clientSecret: payment ? payment.clientSecret : null,
-        }
+          clientSecret: payment?.clientSecret || null,
+          ephemeralKey: payment?.ephemeralKey || null,
+          customer: payment?.customer || null,
+        },
       };
     } catch (error) {
       throw new InternalServerErrorException(error.message);
