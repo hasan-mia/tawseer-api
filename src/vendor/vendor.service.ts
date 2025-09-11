@@ -145,12 +145,12 @@ export class VendorService {
         radiusInMeters = 5000
       } = req.query;
 
-      const cacheKey = `getAllVendor`;
+      // const cacheKey = `getAllVendor`;
 
-      const cacheData = await this.redisCacheService.get(cacheKey);
-      if (cacheData) {
-        return cacheData;
-      }
+      // const cacheData = await this.redisCacheService.get(cacheKey);
+      // if (cacheData) {
+      //   return cacheData;
+      // }
 
       let perPage: number | undefined;
       if (limit && typeof limit === 'string') {
@@ -251,9 +251,9 @@ export class VendorService {
         nextUrl,
       };
 
-      // Cache the result
-      const cacheTTL = (longitude && latitude) ? 30 : 300; // Shorter TTL for location queries
-      await this.redisCacheService.set(cacheKey, data, cacheTTL);
+      // // Cache the result
+      // const cacheTTL = (longitude && latitude) ? 30 : 300; // Shorter TTL for location queries
+      // await this.redisCacheService.set(cacheKey, data, cacheTTL);
 
       return data;
     } catch (error) {
