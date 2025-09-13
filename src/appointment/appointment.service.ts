@@ -159,7 +159,7 @@ export class AppointmentService {
         return cacheData;
       }
 
-      const { keyword } = req.query;
+      const { keyword, name, status, payment_status } = req.query;
 
       let perPage: number | undefined;
 
@@ -168,9 +168,22 @@ export class AppointmentService {
       }
 
       // Construct the search criteria
-      const searchCriteria = { name: String || null };
-      if (keyword) {
-        searchCriteria.name = keyword;
+      interface AppointmentSearchCriteria {
+        name?: string;
+        status?: string;
+        payment_status?: string;
+      }
+
+      const searchCriteria: AppointmentSearchCriteria = {};
+
+      if (status) {
+        searchCriteria.status = status;
+      }
+      if (name) {
+        searchCriteria.name = name;
+      }
+      if (payment_status) {
+        searchCriteria.payment_status = payment_status;
       }
 
       const count = await this.appointmentModel.countDocuments(searchCriteria);
@@ -178,6 +191,16 @@ export class AppointmentService {
       const apiFeature = new ApiFeatures(
         this.appointmentModel
           .find(searchCriteria)
+          .populate('user', 'first_name last_name email avatar')
+          .populate({
+            path: 'vendor',
+            select: 'name logo cover type address mobile',
+            populate: {
+              path: 'user',
+              select: 'first_name last_name email avatar',
+            },
+          })
+          .populate('service', 'name price duration image')
           .select('-__v')
           .sort({ createdAt: -1 }),
         req.query
@@ -235,24 +258,31 @@ export class AppointmentService {
   async getAllAppointmentByUser(req: any) {
     const userId = req.user.id;
     try {
-      const cacheKey = `getAllUserAppointment${userId}`;
-      const cacheData = await this.redisCacheService.get(cacheKey);
-      if (cacheData) {
-        return cacheData;
-      }
+      // const cacheKey = `getAllUserAppointment${userId}`;
+      // const cacheData = await this.redisCacheService.get(cacheKey);
+      // if (cacheData) {
+      //   return cacheData;
+      // }
 
-      const { keyword } = req.query;
+      const { status, payment_status } = req.query;
 
       let perPage: number | undefined;
 
       if (req.query && typeof req.query.limit === 'string') {
         perPage = parseInt(req.query.limit, 10);
       }
+      interface AppointmentSearchCriteria {
+        user: string;
+        status?: string;
+        payment_status?: string;
+      }
 
-      // Construct the search criteria
-      const searchCriteria = { user: userId, name: String || null };
-      if (keyword) {
-        searchCriteria.name = keyword;
+      const searchCriteria: AppointmentSearchCriteria = { user: userId };
+      if (status) {
+        searchCriteria.status = status;
+      }
+      if (payment_status) {
+        searchCriteria.payment_status = payment_status;
       }
 
       const count = await this.appointmentModel.countDocuments(searchCriteria);
@@ -260,6 +290,16 @@ export class AppointmentService {
       const apiFeature = new ApiFeatures(
         this.appointmentModel
           .find(searchCriteria)
+          .populate('user', 'first_name last_name email avatar')
+          .populate({
+            path: 'vendor',
+            select: 'name logo cover type address mobile',
+            populate: {
+              path: 'user',
+              select: 'first_name last_name email avatar',
+            },
+          })
+          .populate('service', 'name price duration image')
           .select('-__v')
           .sort({ createdAt: -1 }),
         req.query
@@ -290,8 +330,8 @@ export class AppointmentService {
       if (perPage !== undefined && currentPage < totalPages!) {
         nextPage = currentPage + 1;
         nextUrl = `${req.originalUrl.split('?')[0]}?limit=${perPage}&page=${nextPage}`;
-        if (keyword) {
-          nextUrl += `&keyword=${keyword}`;
+        if (status) {
+          nextUrl += `&status=${status}`;
         }
       }
 
@@ -305,7 +345,7 @@ export class AppointmentService {
         nextUrl,
       };
 
-      await this.redisCacheService.set(cacheKey, data, 60);
+      // await this.redisCacheService.set(cacheKey, data, 60);
 
       return data;
     } catch (error) {
@@ -323,18 +363,31 @@ export class AppointmentService {
         return cacheData;
       }
 
-      const { keyword } = req.query;
+      const { keyword, status, payment_status } = req.query;
 
       let perPage: number | undefined;
 
       if (req.query && typeof req.query.limit === 'string') {
         perPage = parseInt(req.query.limit, 10);
       }
+      interface AppointmentSearchCriteria {
+        salon: string;
+        name?: string;
+        status?: string;
+        payment_status?: string;
+      }
+
 
       // Construct the search criteria
-      const searchCriteria = { salon: salonId, name: String || null };
+      const searchCriteria: AppointmentSearchCriteria = { salon: salonId, };
       if (keyword) {
         searchCriteria.name = keyword;
+      }
+      if (status) {
+        searchCriteria.status = status;
+      }
+      if (payment_status) {
+        searchCriteria.payment_status = payment_status;
       }
 
       const count = await this.appointmentModel.countDocuments(searchCriteria);
@@ -342,6 +395,16 @@ export class AppointmentService {
       const apiFeature = new ApiFeatures(
         this.appointmentModel
           .find(searchCriteria)
+          .populate('user', 'first_name last_name email avatar')
+          .populate({
+            path: 'vendor',
+            select: 'name logo cover type address mobile',
+            populate: {
+              path: 'user',
+              select: 'first_name last_name email avatar',
+            },
+          })
+          .populate('service', 'name price duration image')
           .select('-__v')
           .sort({ createdAt: -1 }),
         req.query

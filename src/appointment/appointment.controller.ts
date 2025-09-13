@@ -18,7 +18,7 @@ import { AppointmentDto } from './dto/appointment.dto';
 export class AppointmentController {
   constructor(private appointmentService: AppointmentService) { }
 
-  // ======== Create appointment ========
+  // ======== Create appointment / booking ========
   @Post(':id')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.CREATED)
@@ -36,7 +36,8 @@ export class AppointmentController {
   }
 
   // ======== Get all appointment by user ID ========
-  @Get('all/my')
+  @Get('mine')
+  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   async getAllAppointmentByUser(@Request() req) {
     return this.appointmentService.getAllAppointmentByUser(req);
