@@ -70,7 +70,6 @@ export class VendorController {
   @Get('nearby')
   @HttpCode(HttpStatus.OK)
   async getNearbyVendors(@Request() req) {
-    return "ok";
     return this.vendorService.findNearbyVendors(req);
   }
 
@@ -78,7 +77,6 @@ export class VendorController {
   @Get('map-data')
   @HttpCode(HttpStatus.OK)
   async getMapData(@Request() req) {
-    return "ok";
     const { latitude, longitude, radius = 5000 } = req.query;
 
     const vendors = await this.vendorService.findNearbyVendors(req);
@@ -162,13 +160,6 @@ export class VendorController {
   async getFollowing(@Request() req) {
     const userId = req.user.id
     return await this.vendorService.getFollowing(userId, req);
-  }
-
-  @Delete('shop/follower/:id')
-  @UseGuards(JwtAuthGuard)
-  @HttpCode(HttpStatus.OK)
-  async deleteFollower(@Param('id') id: string) {
-    return await this.vendorService.deleteFollower(id);
   }
 
 

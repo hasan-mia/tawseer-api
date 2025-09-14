@@ -2,7 +2,12 @@ import { Conversation } from '@/schemas/conversation.schema';
 import { Message } from '@/schemas/message.schema';
 import { User } from '@/schemas/user.schema';
 import { ChatGateway } from '@/socket/chat.gateway';
-import { forwardRef, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  forwardRef,
+  Inject,
+  Injectable,
+  NotFoundException
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { CreateMessageDto } from './dto/message.dto';
@@ -17,101 +22,95 @@ export class MessageService {
     private chatGateway: ChatGateway,
   ) { }
 
-  async findOrCreateConversation(
-    participantIds: Types.ObjectId[],
-  ): Promise<Conversation> {
-    // Sort the participant IDs to ensure consistent conversation lookup
-    const sortedParticipantIds = [...participantIds].sort((a, b) =>
-      a.toString().localeCompare(b.toString())
+  async findOrCreateConversation(participantIds: Types.ObjectId[]) {
+    const sortedIds = [...participantIds].sort((a, b) =>
+      a.toString().localeCompare(b.toString()),
     );
 
-    // Find existing conversation between these users
     let conversation = await this.conversationModel.findOne({
-      participants: { $all: sortedParticipantIds },
-      $expr: { $eq: [{ $size: '$participants' }, sortedParticipantIds.length] },
+      participants: { $all: sortedIds },
+      $expr: { $eq: [{ $size: '$participants' }, sortedIds.length] },
     });
 
-    // If no conversation exists, create a new one
     if (!conversation) {
       conversation = await this.conversationModel.create({
-        participants: sortedParticipantIds,
+        participants: sortedIds,
       });
     }
-
-    return conversation;
+    return {
+      success: true,
+      message: "Start conversation successfully",
+      data: conversation
+    };
   }
 
-  async sendMessage(createMessageDto: CreateMessageDto): Promise<Message> {
+  async sendMessage(createMessageDto: CreateMessageDto) {
     const { senderId, conversationId, content, attachments } = createMessageDto;
-
-    // Validate that both users exist
     const sender = await this.userModel.findById(senderId);
-    const receiver = await this.userModel.findById(conversationId);
+    if (!sender) throw new NotFoundException('Sender not found');
 
-    if (!sender || !receiver) {
-      throw new NotFoundException('Sender or receiver not found');
-    }
+    const conversation = await this.conversationModel.findById(conversationId);
+    if (!conversation) throw new NotFoundException('Conversation not found');
 
-    // Find or create a conversation between these users
-    const conversation = await this.findOrCreateConversation([
-      senderId, conversationId
-    ]);
-
-    // Create the new message
     const newMessage = await this.messageModel.create({
+      conversation: conversationId,
       sender: senderId,
-      receiver: conversationId,
       content,
       attachments: attachments || [],
     });
 
-    // Update the conversation with the last message
-    await this.conversationModel.findByIdAndUpdate(
-      conversation._id,
-      { last_message: newMessage._id },
-    );
+    await this.conversationModel.findByIdAndUpdate(conversationId, {
+      last_message: newMessage._id,
+      updatedAt: new Date(),
+    });
 
-    // Populate the new message with sender and receiver details for socket emission
-    const populatedMessage = await this.messageModel.findById(newMessage._id)
-      .populate('sender', 'uuid first_name last_name avatar')
-      .populate('receiver', 'uuid first_name last_name avatar');
+    const populatedMessage = await this.messageModel
+      .findById(newMessage._id)
+      .populate('sender', 'first_name last_name avatar email')
 
-    return populatedMessage;
+    // Emit to socket room
+    this.chatGateway.server
+      .to(`conversation:${conversation._id}`)
+      .emit('new-message', populatedMessage);
+
+    return {
+      success: true,
+      message: "Message send successfully",
+      data: populatedMessage
+    };
   }
 
   async getConversations(userId: Types.ObjectId): Promise<any[]> {
-    // Find all conversations that include this user
     const conversations = await this.conversationModel
       .find({ participants: userId, is_deleted: false })
       .populate({
         path: 'last_message',
         populate: [
-          { path: 'sender', select: 'uuid first_name last_name avatar' },
-          { path: 'receiver', select: 'uuid first_name last_name avatar' }
-        ]
+          { path: 'sender', select: 'first_name last_name avatar email' },
+        ],
       })
-      .populate('participants', 'uuid first_name last_name avatar')
+      .populate('participants', 'first_name last_name avatar email')
       .sort({ updatedAt: -1 });
 
-    // Get unread message counts for each conversation
-    const conversationsWithCounts = await Promise.all(conversations.map(async (conv) => {
-      const unreadCount = await this.messageModel.countDocuments({
-        sender: { $in: conv.participants },
-        receiver: userId,
-        is_read: false,
-        is_deleted: false
-      });
+    const conversationsWithCounts = await Promise.all(
+      conversations.map(async (conv) => {
+        const unreadCount = await this.messageModel.countDocuments({
+          conversation: conv._id,
+          is_read: false,
+          is_deleted: false,
+        });
 
-      const otherParticipants = conv.participants.filter(
-        participant => participant._id.toString() !== userId.toString()
-      );
+        const otherParticipants = conv.participants.filter(
+          (p) => p._id.toString() !== userId.toString(),
+        );
 
-      return {
-        ...conv.toObject(),
-        other_participants: otherParticipants,
-        unread_count: unreadCount
-      };
-    }));
+        return {
+          ...conv.toObject(),
+          other_participants: otherParticipants,
+          unread_count: unreadCount,
+        };
+      }),
+    );
 
     return conversationsWithCounts;
   }
@@ -121,113 +120,104 @@ export class MessageService {
     userId: Types.ObjectId,
     page = 1,
     limit = 20,
-  ): Promise<{ messages: Message[]; total: number; pages: number }> {
+  ) {
     const conversation = await this.conversationModel.findById(conversationId);
-    if (!conversation) {
-      throw new NotFoundException('Conversation not found');
-    }
+    if (!conversation) throw new NotFoundException('Conversation not found');
 
-    // Ensure user is part of this conversation
-    if (!conversation.participants.some(p => p.toString() === userId.toString())) {
+    if (!conversation.participants.some((p) => p.toString() === userId.toString())) {
       throw new NotFoundException('User not part of this conversation');
     }
 
     const skip = (page - 1) * limit;
+
     const [messages, total] = await Promise.all([
       this.messageModel
-        .find({
-          $or: [
-            { sender: { $in: conversation.participants }, receiver: { $in: conversation.participants } }
-          ],
-          is_deleted: false,
-        })
+        .find({ conversation: conversationId, is_deleted: false })
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .populate('sender', 'uuid first_name last_name avatar')
-        .populate('receiver', 'uuid first_name last_name avatar'),
+        .populate('sender', 'first_name last_name avatar email'),
       this.messageModel.countDocuments({
-        $or: [
-          { sender: { $in: conversation.participants }, receiver: { $in: conversation.participants } }
-        ],
+        conversation: conversationId,
         is_deleted: false,
       }),
     ]);
 
-    // Mark unread messages as read if the current user is the receiver
-    const unreadMessages = await this.messageModel.find({
-      conversation: conversationId,
-      receiver: userId,
-      is_read: false,
-    });
-
-    if (unreadMessages.length > 0) {
-      await this.messageModel.updateMany(
-        {
-          _id: { $in: unreadMessages.map(m => m._id) }
-        },
-        {
-          $set: { is_read: true, read_at: new Date() }
-        }
-      );
-    }
-
+    await this.messageModel.updateMany(
+      { conversation: conversationId, receiver: userId, is_read: false },
+      { $set: { is_read: true, read_at: new Date() } },
+    );
     return {
-      messages: messages.reverse(),
+      success: true,
+      message: "Message fetched successfully",
+      data: messages.reverse(),
       total,
       pages: Math.ceil(total / limit),
     };
   }
 
-  async markMessageAsRead(messageId: string): Promise<Message> {
-    const message = await this.messageModel.findByIdAndUpdate(
-      messageId,
-      { is_read: true, read_at: new Date() },
-      { new: true },
-    ).populate('sender', 'uuid first_name last_name avatar')
-      .populate('receiver', 'uuid first_name last_name avatar');
+  async markMessageAsRead(messageId: string) {
+    const message = await this.messageModel
+      .findByIdAndUpdate(
+        messageId,
+        { is_read: true, read_at: new Date() },
+        { new: true },
+      )
+      .populate('sender', 'first_name last_name avatar email')
 
-    if (!message) {
-      throw new NotFoundException('Message not found');
-    }
+    if (!message) throw new NotFoundException('Message not found');
 
-    return message;
+    return {
+      success: true,
+      message: "Message read successfully",
+      data: message
+    };
   }
 
-  async deleteMessage(messageId: string, userId: string): Promise<boolean> {
+  async deleteMessage(messageId: string, userId: string) {
     const message = await this.messageModel.findById(messageId);
-    if (!message) {
-      throw new NotFoundException('Message not found');
-    }
+    if (!message) throw new NotFoundException('Message not found');
 
-    // Only allow deletion if the user is the sender
-    if (message.sender.toString() !== userId) {
+    if (message.sender.toString() !== userId.toString()) {
       throw new NotFoundException('Unauthorized to delete this message');
     }
 
     await this.messageModel.findByIdAndUpdate(messageId, { is_deleted: true });
 
-    // Find the conversation this message belongs to
-    const conversation = await this.conversationModel.findOne({
-      participants: { $all: [message.sender] }
-    });
-
+    const conversation = await this.conversationModel.findById(message.conversation);
     if (conversation) {
-      // Notify conversation participants about the deleted message
-      this.chatGateway.server.to(`conversation:${conversation._id}`).emit('message-deleted', {
-        messageId,
-        conversationId: conversation._id
-      });
+      this.chatGateway.server
+        .to(`conversation:${conversation._id}`)
+        .emit('message-deleted', { messageId, conversationId: conversation._id });
     }
 
-    return true;
+    return {
+      success: true,
+      message: "Message deleted successfully",
+      data: true
+    };
   }
 
-  async getUnreadMessageCount(userId: Types.ObjectId): Promise<number> {
-    return this.messageModel.countDocuments({
-      receiver: userId,
+  async getUnreadMessageCount(userId: string) {
+    // Find conversations where the user is a participant
+    const conversations = await this.conversationModel
+      .find({ participants: userId })
+      .select('_id');
+
+    const conversationIds = conversations.map((c) => c._id);
+
+    const data = await this.messageModel.countDocuments({
+      conversation: { $in: conversationIds },
+      sender: { $ne: userId },
       is_read: false,
-      is_deleted: false
+      is_deleted: false,
     });
+
+    return {
+      success: true,
+      message: "Unread found successfully",
+      data: data
+    }
   }
+
 }

@@ -145,13 +145,6 @@ export class VendorService {
         radiusInMeters = 5000
       } = req.query;
 
-      // const cacheKey = `getAllVendor`;
-
-      // const cacheData = await this.redisCacheService.get(cacheKey);
-      // if (cacheData) {
-      //   return cacheData;
-      // }
-
       let perPage: number | undefined;
       if (limit && typeof limit === 'string') {
         perPage = parseInt(limit, 10);
@@ -268,12 +261,6 @@ export class VendorService {
   // ======== Get single Vendor info by ID ========
   async getVendorInfo(slug: string) {
     try {
-      const cacheKey = `VendorInfo${slug}`;
-      const cacheData = await this.redisCacheService.get(cacheKey);
-
-      if (cacheData) {
-        return cacheData;
-      }
 
       const data = await this.vendorModel.findOne({ slug }).populate("user", "first_name last_name email mobile avatar username").exec();
 
@@ -286,9 +273,6 @@ export class VendorService {
         message: 'Vendor found successfully',
         data: data,
       };
-
-      // set caching
-      await this.redisCacheService.set(cacheKey, result, 60);
 
       return result;
     } catch (error) {
@@ -451,38 +435,37 @@ export class VendorService {
       const existing = await this.vendorFollowModel.findOne({ user: userId, vendor: vendorId });
 
       if (existing) {
-        await this.vendorFollowModel.findOneAndDelete({ user: userId, vendor: vendorId });
+        // Remove follow record
+        await this.vendorFollowModel.findByIdAndDelete(existing._id);
 
+        // Remove vendor from user's following list
         await this.userModel.updateOne(
           { _id: userId },
-          { $pull: { vendor_following: existing._id } }
+          { $pull: { vendor_following: vendorId } }
         );
 
-        const result = {
-          success: false,
-          message: 'Unfollow successfully',
-          data: { followed: false, _id: existing._id, user: userId, vendor: vendorId },
-        };
-        return result;
-      } else {
-        const follow = await this.vendorFollowModel.create({ user: userId, vendor: vendorId });
-
-        await this.userModel.updateOne(
-          { _id: userId },
-          { $addToSet: { vendor_following: follow._id } }
-        );
-
-        const result = {
+        return {
           success: true,
-          message: 'Follow successfully',
-          data: { followed: true, _id: follow._id, user: userId, vendor: vendorId },
+          message: 'Unfollowed successfully',
+          data: { followed: false, vendor: vendorId, user: userId },
         };
-        return result;
+      } else {
+        // Create follow record
+        await this.vendorFollowModel.create({ user: userId, vendor: vendorId });
+
+        // Add vendor to user's following list
+        await this.userModel.updateOne(
+          { _id: userId },
+          { $addToSet: { vendor_following: vendorId } }
+        );
+
+        return {
+          success: true,
+          message: 'Followed successfully',
+          data: { followed: true, vendor: vendorId, user: userId },
+        };
       }
     } catch (error) {
-      if (error instanceof BadRequestException || error instanceof NotFoundException) {
-        throw error;
-      }
       throw new InternalServerErrorException(error.message);
     }
   }
@@ -511,142 +494,126 @@ export class VendorService {
     try {
       const { keyword, limit, page } = req.query;
 
-      let perPage: number | undefined;
+      const perPage = limit ? parseInt(limit, 10) : 10;
+      const currentPage = page ? parseInt(page, 10) : 1;
+      const skip = (currentPage - 1) * perPage;
 
-      if (limit && typeof limit === 'string') {
-        perPage = parseInt(limit, 10);
-      }
+      // Base query
+      const query = { vendor: vendorId };
 
-      const searchCriteria: any = {};
+      // Fetch followers with populated user
+      const [followers, total] = await Promise.all([
+        this.vendorFollowModel
+          .find(query)
+          .populate<{ user: User }>(
+            "user",
+            "first_name last_name avatar email username mobile"
+          )
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(perPage),
+        this.vendorFollowModel.countDocuments(query),
+      ]);
 
+      // Apply keyword filtering (in-memory, since it's on populated user fields)
+      let filteredFollowers = followers;
       if (keyword) {
-        searchCriteria.$or = [
-          { name: { $regex: keyword, $options: 'i' } },
-          { mobile: { $regex: keyword, $options: 'i' } },
-        ];
+        const regex = new RegExp(keyword, "i");
+        filteredFollowers = followers.filter((f) => {
+          const u = f.user as User;
+          return (
+            regex.test(u?.first_name ?? "") ||
+            regex.test(u?.last_name ?? "") ||
+            regex.test(u?.mobile ?? "") ||
+            regex.test(u?.email ?? "") ||
+            regex.test(u?.username ?? "")
+          );
+        });
       }
 
-      const count = await this.vendorFollowModel.countDocuments(searchCriteria);
-
-      const currentPage = page ? parseInt(page as string, 10) : 1;
-      const skip = perPage ? perPage * (currentPage - 1) : 0;
-
-
-      const result = await this.vendorFollowModel.find({ vendor: vendorId })
-        .populate('user', 'first_name last_name avatar email username')
-        .skip(skip)
-        .limit(perPage || 10)
-        .sort({ createdAt: -1 })
-
-      const totalPages = perPage ? Math.ceil(count / perPage) : 1;
+      // Pagination details
+      const totalPages = Math.ceil(total / perPage);
       let nextPage: number | null = null;
       let nextUrl: string | null = null;
 
-      if (perPage && currentPage < totalPages) {
+      if (currentPage < totalPages) {
         nextPage = currentPage + 1;
-        nextUrl = `${req.originalUrl.split('?')[0]}?limit=${perPage}&page=${nextPage}`;
-        if (keyword) {
-          nextUrl += `&keyword=${keyword}`;
-        }
-
+        nextUrl = `${req.originalUrl.split("?")[0]}?limit=${perPage}&page=${nextPage}`;
+        if (keyword) nextUrl += `&keyword=${keyword}`;
       }
 
-      const data = {
+      return {
         success: true,
         message: "Fetched successfully",
-        data: result || [],
-        total: count,
+        data: filteredFollowers,
+        total,
         perPage,
         nextPage,
         nextUrl,
       };
-
-
-      return data;
     } catch (error) {
-      if (error instanceof BadRequestException || error instanceof NotFoundException) {
-        throw error;
-      }
       throw new InternalServerErrorException(error.message);
     }
   }
-
 
   async getFollowing(userId: string, req: any) {
     try {
       const { keyword, limit, page } = req.query;
 
-      let perPage: number | undefined;
+      const perPage = limit ? parseInt(limit, 10) : 10;
+      const currentPage = page ? parseInt(page, 10) : 1;
+      const skip = (currentPage - 1) * perPage;
 
-      if (limit && typeof limit === 'string') {
-        perPage = parseInt(limit, 10);
-      }
+      // Base query
+      const query = { user: userId };
 
-      const searchCriteria: any = {};
+      // Fetch following with populated vendor
+      const [following, total] = await Promise.all([
+        this.vendorFollowModel
+          .find(query)
+          .populate<{ vendor: Vendor }>("vendor", "name logo slug")
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(perPage),
+        this.vendorFollowModel.countDocuments(query),
+      ]);
 
+      // Apply keyword filtering (in-memory, since vendor is populated)
+      let filteredFollowing = following;
       if (keyword) {
-        searchCriteria.$or = [
-          { name: { $regex: keyword, $options: 'i' } },
-          { mobile: { $regex: keyword, $options: 'i' } },
-        ];
+        const regex = new RegExp(keyword, "i");
+        filteredFollowing = following.filter((f) => {
+          const v = f.vendor as Vendor;
+          return (
+            regex.test(v?.name ?? "") ||
+            regex.test(v?.slug ?? "")
+          );
+        });
       }
 
-      const count = await this.vendorFollowModel.countDocuments(searchCriteria);
-
-      const currentPage = page ? parseInt(page as string, 10) : 1;
-      const skip = perPage ? perPage * (currentPage - 1) : 0;
-
-
-      const result = await this.vendorFollowModel.find({ user: userId })
-        .populate('vendor', 'name logo slug')
-        .skip(skip)
-        .limit(perPage || 10)
-        .sort({ createdAt: -1 })
-
-      const totalPages = perPage ? Math.ceil(count / perPage) : 1;
+      // Pagination details
+      const totalPages = Math.ceil(total / perPage);
       let nextPage: number | null = null;
       let nextUrl: string | null = null;
 
-      if (perPage && currentPage < totalPages) {
+      if (currentPage < totalPages) {
         nextPage = currentPage + 1;
-        nextUrl = `${req.originalUrl.split('?')[0]}?limit=${perPage}&page=${nextPage}`;
-        if (keyword) {
-          nextUrl += `&keyword=${keyword}`;
-        }
-
+        nextUrl = `${req.originalUrl.split("?")[0]}?limit=${perPage}&page=${nextPage}`;
+        if (keyword) nextUrl += `&keyword=${keyword}`;
       }
 
-      const data = {
+      return {
         success: true,
         message: "Fetched successfully",
-        data: result || [],
-        total: count,
+        data: filteredFollowing,
+        total,
         perPage,
         nextPage,
         nextUrl,
       };
-
-
-      return data;
     } catch (error) {
-      if (error instanceof BadRequestException || error instanceof NotFoundException) {
-        throw error;
-      }
       throw new InternalServerErrorException(error.message);
     }
   }
-
-  async deleteFollower(id: string) {
-    try {
-      const result = await this.vendorFollowModel.findOneAndDelete({ _id: id });
-      return { success: true, message: "Delete success", data: result };
-    } catch (error) {
-      if (error instanceof BadRequestException || error instanceof NotFoundException) {
-        throw error;
-      }
-      throw new InternalServerErrorException(error.message);
-    }
-  }
-
 
 }

@@ -171,11 +171,11 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
             const updatedMessage = await this.messageService.markMessageAsRead(messageId);
 
             // Notify sender that their message has been read
-            const senderSocketId = this.connectedUsers.get(updatedMessage.sender.toString());
+            const senderSocketId = this.connectedUsers.get(updatedMessage.data.sender.toString());
             if (senderSocketId) {
-                this.server.to(`user:${updatedMessage.sender}`).emit('message-read', {
+                this.server.to(`user:${updatedMessage.data.sender}`).emit('message-read', {
                     messageId,
-                    readAt: updatedMessage.read_at
+                    readAt: updatedMessage.data.read_at
                 });
             }
 
