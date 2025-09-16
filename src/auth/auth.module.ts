@@ -17,6 +17,7 @@ import { SmsService } from './sms.service';
   imports: [
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
+      global: true,
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
         return {

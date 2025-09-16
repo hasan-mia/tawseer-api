@@ -39,9 +39,6 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     async handleConnection(socket: Socket) {
         try {
             console.log(`Client connected: ${socket.id}`);
-            console.log('Incoming connection...', socket.id);
-            console.log('Handshake auth:', socket.handshake.auth.token);
-
             // Extract token from the handshake query or headers
             const token = socket.handshake.auth.token ||
                 socket.handshake.headers.authorization?.split(' ')[1];
@@ -120,13 +117,12 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         }
     ) {
         try {
+            console.log(data)
             // Extract token from the handshake to get the sender ID
             const token = socket.handshake.auth.token ||
                 socket.handshake.headers.authorization?.split(' ')[1];
             const payload = this.jwtService.verify(token);
-            const senderId = payload.sub || payload._id;
-
-            console.log(token)
+            const senderId = payload.sub || payload.id || payload._id;
 
             console.log("Handle send message from", senderId, "data:", data);
             if (!senderId) {
@@ -134,7 +130,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
             }
 
             // Validate input
-            if (!data.conversationId || (!data.content && (!data.attachments || data.attachments.length === 0))) {
+            if (!data.conversationId || (!data.content)) {
                 return { event: 'send-message', data: { success: false, error: 'Invalid message data' } };
             }
 
