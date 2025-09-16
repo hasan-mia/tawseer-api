@@ -8,7 +8,6 @@ import {
   Param,
   Post,
   Put,
-  Query,
   Request,
   UseGuards
 } from '@nestjs/common';
@@ -45,7 +44,7 @@ export class MessageController {
   @Get('conversations')
   @UseGuards(JwtAuthGuard)
   async getConversations(@Request() req) {
-    return this.messageService.getConversations(req.user._id);
+    return this.messageService.getConversations(req.user._id, req);
   }
 
   // Get total unread message count for logged-in user
@@ -60,15 +59,12 @@ export class MessageController {
   @UseGuards(JwtAuthGuard)
   async getMessagesByConversation(
     @Param('conversationId') conversationId: string,
-    @Query('page') page: string = '1',
-    @Query('limit') limit: string = '20',
     @Request() req,
   ) {
     return this.messageService.getMessagesByConversation(
       conversationId,
       req.user._id,
-      parseInt(page, 10),
-      parseInt(limit, 10),
+      req,
     );
   }
 

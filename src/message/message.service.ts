@@ -6,6 +6,7 @@ import {
   forwardRef,
   Inject,
   Injectable,
+  InternalServerErrorException,
   NotFoundException
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -42,7 +43,7 @@ export class MessageService {
       message: "Start conversation successfully",
       data: conversation
     };
-  }
+  };
 
   async sendMessage(createMessageDto: CreateMessageDto) {
     const { senderId, conversationId, content, attachments } = createMessageDto;
@@ -80,80 +81,156 @@ export class MessageService {
     };
   }
 
-  async getConversations(userId: Types.ObjectId): Promise<any[]> {
-    const conversations = await this.conversationModel
-      .find({ participants: userId, is_deleted: false })
-      .populate({
-        path: 'last_message',
-        populate: [
-          { path: 'sender', select: 'first_name last_name avatar email' },
-        ],
-      })
-      .populate('participants', 'first_name last_name avatar email')
-      .sort({ updatedAt: -1 });
+  async getConversations(userId: Types.ObjectId, req: any) {
+    try {
+      const page = req?.query?.page ? parseInt(req.query.page, 10) : 1;
+      const limit = req?.query?.limit ? parseInt(req.query.limit, 10) : 10;
+      const keyword = req?.query?.keyword || null;
 
-    const conversationsWithCounts = await Promise.all(
-      conversations.map(async (conv) => {
-        const unreadCount = await this.messageModel.countDocuments({
-          conversation: conv._id,
-          is_read: false,
-          is_deleted: false,
-        });
+      const skip = (page - 1) * limit;
 
-        const otherParticipants = conv.participants.filter(
-          (p) => p._id.toString() !== userId.toString(),
-        );
+      let baseQuery: any = { participants: userId, is_deleted: false };
 
-        return {
-          ...conv.toObject(),
-          other_participants: otherParticipants,
-          unread_count: unreadCount,
-        };
-      }),
-    );
+      if (keyword) {
+        baseQuery.$or = [
+          { "sender.first_name": { $regex: keyword, $options: "i" } },
+          { "sender.last_name": { $regex: keyword, $options: "i" } },
+          { "sender.email": { $regex: keyword, $options: "i" } },
+        ];
+      }
 
-    return conversationsWithCounts;
-  }
+      // Count total conversations
+      const count = await this.conversationModel.countDocuments(baseQuery);
 
-  async getMessagesByConversation(
-    conversationId: string,
-    userId: Types.ObjectId,
-    page = 1,
-    limit = 20,
-  ) {
-    const conversation = await this.conversationModel.findById(conversationId);
-    if (!conversation) throw new NotFoundException('Conversation not found');
-
-    if (!conversation.participants.some((p) => p.toString() === userId.toString())) {
-      throw new NotFoundException('User not part of this conversation');
-    }
-
-    const skip = (page - 1) * limit;
-
-    const [messages, total] = await Promise.all([
-      this.messageModel
-        .find({ conversation: conversationId, is_deleted: false })
-        .sort({ createdAt: -1 })
+      // Fetch conversations with pagination
+      const conversations = await this.conversationModel
+        .find(baseQuery)
+        .populate({
+          path: "last_message",
+          populate: [
+            { path: "sender", select: "first_name last_name avatar email" },
+          ],
+        })
+        .populate("participants", "first_name last_name avatar email")
+        .sort({ updatedAt: -1 })
         .skip(skip)
         .limit(limit)
-        .populate('sender', 'first_name last_name avatar email'),
-      this.messageModel.countDocuments({
-        conversation: conversationId,
-        is_deleted: false,
-      }),
-    ]);
+        .exec();
 
-    await this.messageModel.updateMany(
-      { conversation: conversationId, receiver: userId, is_read: false },
-      { $set: { is_read: true, read_at: new Date() } },
-    );
-    return {
-      success: true,
-      message: "Message fetched successfully",
-      data: messages.reverse(),
-      total,
-      pages: Math.ceil(total / limit),
-    };
+      // Add unread counts & other participants
+      const conversationsWithCounts = await Promise.all(
+        conversations.map(async (conv) => {
+          const unreadCount = await this.messageModel.countDocuments({
+            conversation: conv._id,
+            is_read: false,
+            is_deleted: false,
+          });
+
+          const otherParticipants = conv.participants.filter(
+            (p) => p._id.toString() !== userId.toString()
+          );
+
+          return {
+            ...conv.toObject(),
+            other_participants: otherParticipants,
+            unread_count: unreadCount,
+          };
+        })
+      );
+
+      // Pagination info
+      const totalPages = Math.ceil(count / limit);
+      let nextPage: number | null = null;
+      let nextUrl: string | null = null;
+
+      if (page < totalPages) {
+        nextPage = page + 1;
+        if (req) {
+          const params = new URLSearchParams(req.query);
+          params.set("page", nextPage.toString());
+          nextUrl = `${req.originalUrl.split("?")[0]}?${params.toString()}`;
+        }
+      }
+
+      return {
+        success: true,
+        message: "Conversations fetched successfully",
+        data: conversationsWithCounts,
+        total: count,
+        perPage: limit,
+        currentPage: page,
+        totalPages,
+        nextPage,
+        nextUrl,
+      };
+    } catch (error) {
+      console.error("Error in getConversations:", error);
+      throw new InternalServerErrorException(error.message);
+    }
+  }
+
+  async getMessagesByConversation(conversationId: string, userId: Types.ObjectId, req: any) {
+    try {
+      const page = req?.query?.page ? parseInt(req.query.page, 10) : 1;
+      const limit = req?.query?.limit ? parseInt(req.query.limit, 10) : 10;
+
+      const currentPage = page > 0 ? page : 1;
+      const perPage = limit > 0 ? limit : 10;
+
+      const conversation = await this.conversationModel.findById(conversationId);
+      if (!conversation) throw new NotFoundException("Conversation not found");
+
+      if (!conversation.participants.some((p) => p.toString() === userId.toString())) {
+        throw new NotFoundException("User not part of this conversation");
+      }
+
+      const skip = (currentPage - 1) * perPage;
+
+      const [messages, total] = await Promise.all([
+        this.messageModel
+          .find({ conversation: conversationId, is_deleted: false })
+          .sort({ createdAt: -1 }) // newest first
+          .skip(skip)
+          .limit(perPage)
+          .populate("sender", "first_name last_name avatar email"),
+        this.messageModel.countDocuments({
+          conversation: conversationId,
+          is_deleted: false,
+        }),
+      ]);
+
+      await this.messageModel.updateMany(
+        { conversation: conversationId, receiver: userId, is_read: false },
+        { $set: { is_read: true, read_at: new Date() } }
+      );
+
+      const totalPages = Math.ceil(total / perPage);
+      let nextPage: number | null = null;
+      let nextUrl: string | null = null;
+
+      if (currentPage < totalPages) {
+        nextPage = currentPage + 1;
+        if (req) {
+          const params = new URLSearchParams(req.query);
+          params.set("page", nextPage.toString());
+          nextUrl = `${req.originalUrl.split("?")[0]}?${params.toString()}`;
+        }
+      }
+
+      return {
+        success: true,
+        message: "Messages fetched successfully",
+        data: messages.reverse(),
+        total,
+        perPage,
+        currentPage,
+        totalPages,
+        nextPage,
+        nextUrl,
+      };
+    } catch (error) {
+      throw new InternalServerErrorException(error.message);
+    }
   }
 
   async markMessageAsRead(messageId: string) {
