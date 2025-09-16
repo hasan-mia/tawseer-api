@@ -1,6 +1,8 @@
 import { MessageService } from '@/message/message.service';
+import { Conversation } from '@/schemas/conversation.schema';
 import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { InjectModel } from '@nestjs/mongoose';
 import {
     ConnectedSocket,
     MessageBody,
@@ -11,13 +13,10 @@ import {
     WebSocketGateway,
     WebSocketServer
 } from '@nestjs/websockets';
-import { Types } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Server, Socket } from 'socket.io';
 
-@WebSocketGateway({
-    cors: { origin: '*' },
-    namespace: '/chat'
-})
+@WebSocketGateway({ cors: { origin: '*' } })
 @Injectable()
 export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
     @WebSocketServer()
@@ -27,6 +26,8 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     private connectedUsers = new Map<string, string>();
 
     constructor(
+        @InjectModel(Conversation.name)
+        private conversationModel: Model<Conversation>,
         private messageService: MessageService,
         private jwtService: JwtService
     ) { }
@@ -38,6 +39,8 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     async handleConnection(socket: Socket) {
         try {
             console.log(`Client connected: ${socket.id}`);
+            console.log('Incoming connection...', socket.id);
+            console.log('Handshake auth:', socket.handshake.auth.token);
 
             // Extract token from the handshake query or headers
             const token = socket.handshake.auth.token ||
@@ -123,6 +126,18 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
             const payload = this.jwtService.verify(token);
             const senderId = payload.sub || payload._id;
 
+            console.log(token)
+
+            console.log("Handle send message from", senderId, "data:", data);
+            if (!senderId) {
+                return { event: 'send-message', data: { success: false, error: 'Invalid sender' } };
+            }
+
+            // Validate input
+            if (!data.conversationId || (!data.content && (!data.attachments || data.attachments.length === 0))) {
+                return { event: 'send-message', data: { success: false, error: 'Invalid message data' } };
+            }
+
             const { conversationId, content, attachments } = data;
 
             // Save message to database
@@ -133,28 +148,40 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
                 attachments
             });
 
-            // Get conversation to which this message belongs
-            const conversation = await this.messageService.findOrCreateConversation([
-                new Types.ObjectId(senderId),
-                new Types.ObjectId(conversationId)
-            ]);
+            // Get the conversation to find other participants
+            const conversation = await this.conversationModel.findById(conversationId).populate('participants', '_id');
+
+            if (!conversation) {
+                return { event: 'send-message', data: { success: false, error: 'Conversation not found' } };
+            }
 
             // Emit to the conversation room
             this.server.to(`conversation:${conversationId}`).emit('new-message', {
-                message,
+                message: message.data,
                 conversationId
             });
 
-            // If the receiver is not in the conversation room, send a notification to their personal room
-            const receiverSocketId = this.connectedUsers.get(conversationId);
-            if (receiverSocketId) {
-                this.server.to(`user:${conversationId}`).emit('message-notification', {
-                    message,
-                    conversationId
-                });
-            }
+            // Find receiver(s) - all participants except sender
+            const receiverIds = conversation.participants
+                .filter(participant => participant._id.toString() !== senderId.toString())
+                .map(participant => participant._id.toString());
 
-            return { event: 'send-message', data: { success: true, message } };
+            // Send notification to receivers who are not in the conversation room
+            receiverIds.forEach(receiverId => {
+                const receiverSocketId = this.connectedUsers.get(receiverId);
+                if (receiverSocketId) {
+                    // Check if receiver is not already in the conversation room
+                    const receiverSocket = this.server.sockets.sockets.get(receiverSocketId);
+                    if (receiverSocket && !receiverSocket.rooms.has(`conversation:${conversationId}`)) {
+                        this.server.to(`user:${receiverId}`).emit('message-notification', {
+                            message: message.data,
+                            conversationId
+                        });
+                    }
+                }
+            });
+
+            return { event: 'send-message', data: { success: true, message: message.data } };
         } catch (error) {
             console.error('Error handling send message:', error);
             return { event: 'send-message', data: { success: false, error: error.message } };
