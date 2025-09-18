@@ -1,14 +1,13 @@
 import { IsArray, IsMongoId, IsNotEmpty, IsOptional, IsString } from 'class-validator';
-import { Types } from 'mongoose';
 
 export class CreateMessageDto {
   @IsNotEmpty()
   @IsMongoId()
-  senderId: Types.ObjectId;
+  senderId: string;
 
   @IsNotEmpty()
   @IsMongoId()
-  conversationId: Types.ObjectId;
+  conversationId: string;
 
   @IsNotEmpty()
   @IsString()
@@ -18,7 +17,6 @@ export class CreateMessageDto {
   @IsArray()
   attachments?: string[];
 }
-
 export class GetMessagesDto {
   @IsNotEmpty()
   @IsMongoId()

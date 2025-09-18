@@ -71,8 +71,9 @@ export class MessageController {
   // Mark a single message as read
   @Put('read/:messageId')
   @UseGuards(JwtAuthGuard)
-  async markAsRead(@Param('messageId') messageId: string) {
-    return this.messageService.markMessageAsRead(messageId);
+  async markAsRead(@Param('messageId') messageId: string, @Request() req) {
+    const userId = req.user._id;
+    return this.messageService.markMessageAsRead(messageId, userId);
   }
 
   // Delete a message (only if user is sender)

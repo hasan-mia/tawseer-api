@@ -238,18 +238,17 @@ export class MessageService {
       const skip = (currentPage - 1) * perPage;
 
       // Get messages with proper pagination
-      // Sort by createdAt DESC for pagination, but we'll reverse for display
       const [messages, total] = await Promise.all([
         this.messageModel
           .find({
             conversation: conversationId,
             is_deleted: false
           })
-          .sort({ createdAt: -1 }) // Latest first for pagination
+          .sort({ createdAt: -1 })
           .skip(skip)
           .limit(perPage)
           .populate("sender", "first_name last_name avatar email _id")
-          .lean(), // Use lean() for better performance
+          .lean(),
         this.messageModel.countDocuments({
           conversation: conversationId,
           is_deleted: false,
@@ -329,7 +328,7 @@ export class MessageService {
     }
   }
 
-  async markMessageAsRead(messageId: string, userId?: Types.ObjectId) {
+  async markMessageAsRead(messageId: string, userId: Types.ObjectId) {
     try {
       const message = await this.messageModel.findById(messageId);
       if (!message) {

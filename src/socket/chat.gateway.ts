@@ -13,7 +13,7 @@ import {
     WebSocketGateway,
     WebSocketServer
 } from '@nestjs/websockets';
-import { Model, Types } from 'mongoose';
+import { Model } from 'mongoose';
 import { Server, Socket } from 'socket.io';
 
 interface ConnectedUser {
@@ -156,7 +156,8 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     ) {
         try {
             if (!socket.data.authenticated) {
-                return { event: 'join-conversation', data: { success: false, error: 'Not authenticated' } };
+                socket.emit('join-conversation', { success: false, error: 'Not authenticated' });
+                return;
             }
 
             const { conversationId } = data;
@@ -165,23 +166,29 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
             // Verify user is part of this conversation
             const conversation = await this.conversationModel.findById(conversationId);
             if (!conversation) {
-                return { event: 'join-conversation', data: { success: false, error: 'Conversation not found' } };
+                socket.emit('join-conversation', { success: false, error: 'Conversation not found' });
+                return;
             }
 
             if (!conversation.participants.some(p => p.toString() === userId)) {
-                return { event: 'join-conversation', data: { success: false, error: 'Not authorized to join this conversation' } };
+                socket.emit('join-conversation', { success: false, error: 'Not authorized to join this conversation' });
+                return;
             }
 
             socket.join(`conversation:${conversationId}`);
             console.log(`Socket ${socket.id} (User ${userId}) joined conversation: ${conversationId}`);
 
-            // Update last seen
             this.updateUserLastSeen(socket.id);
 
-            return { event: 'join-conversation', data: { conversationId, success: true } };
+            socket.emit('join-conversation', {
+                conversationId,
+                success: true,
+                message: 'Successfully joined conversation'
+            });
+
         } catch (error) {
             console.error('Error joining conversation:', error);
-            return { event: 'join-conversation', data: { success: false, error: error.message } };
+            socket.emit('join-conversation', { success: false, error: error.message });
         }
     }
 
@@ -214,15 +221,13 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     ) {
         try {
             if (!socket.data.authenticated) {
-                return { event: 'get-messages', data: { success: false, error: 'Not authenticated' } };
+                socket.emit('get-messages', { success: false, error: 'Not authenticated' });
+                return;
             }
 
             const userId = socket.data.userId;
-
-            // Update last seen
             this.updateUserLastSeen(socket.id);
 
-            // Create a mock request object for the service
             const mockReq = {
                 query: {
                     page: data.page ?? 1,
@@ -233,17 +238,18 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
 
             const result = await this.messageService.getMessagesByConversation(
                 data.conversationId,
-                new Types.ObjectId(userId),
+                userId,
                 mockReq
             );
 
             console.log(`Messages fetched for conversation ${data.conversationId}, page ${data.page ?? 1}`);
 
-            // Return response to client
-            return { event: 'get-messages', data: result };
+            // Emit response directly to the requesting socket
+            socket.emit('get-messages', result);
+
         } catch (error) {
             console.error('Error fetching messages:', error);
-            return { event: 'get-messages', data: { success: false, error: error.message } };
+            socket.emit('get-messages', { success: false, error: error.message });
         }
     }
 
@@ -259,53 +265,66 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     ) {
         try {
             if (!socket.data.authenticated) {
-                return { event: 'send-message', data: { success: false, error: 'Not authenticated' } };
+                socket.emit('message-failure', {
+                    success: false,
+                    error: 'Not authenticated',
+                    tempId: data.tempId
+                });
+                return;
             }
 
             const senderId = socket.data.userId;
 
-            // Validate input
             if (!data.conversationId || !data.content?.trim()) {
-                return { event: 'send-message', data: { success: false, error: 'Invalid message data' } };
+                socket.emit('message-failure', {
+                    success: false,
+                    error: 'Invalid message data',
+                    tempId: data.tempId
+                });
+                return;
             }
 
             const { conversationId, content, attachments } = data;
 
-            // Update last seen
             this.updateUserLastSeen(socket.id);
-
-            // Remove user from typing (they just sent a message)
             this.removeFromTyping(conversationId, senderId);
 
             // Save message to database
             const messageResult = await this.messageService.sendMessage({
-                senderId: new Types.ObjectId(senderId),
-                conversationId: new Types.ObjectId(conversationId),
+                senderId,
+                conversationId,
                 content: content.trim(),
                 attachments: attachments || []
             });
 
             if (!messageResult.success) {
-                return { event: 'send-message', data: { success: false, error: 'Failed to save message' } };
+                socket.emit('message-failure', {
+                    success: false,
+                    error: 'Failed to save message',
+                    tempId: data.tempId
+                });
+                return;
             }
 
-            // The MessageService already handles socket emission, so we don't need to do it again here
             console.log(`Message sent successfully in conversation ${conversationId}`);
 
-            return {
-                event: 'send-message',
-                data: {
-                    success: true,
-                    message: messageResult.data,
-                    tempId: data.tempId // Return tempId for client-side optimistic updates
-                }
-            };
+            // Emit success to sender
+            socket.emit('send-message', {
+                success: true,
+                message: messageResult.data,
+                tempId: data.tempId
+            });
 
         } catch (error) {
             console.error('Error handling send message:', error);
-            return { event: 'send-message', data: { success: false, error: error.message } };
+            socket.emit('message-failure', {
+                success: false,
+                error: error.message,
+                tempId: data.tempId
+            });
         }
     }
+
 
     @SubscribeMessage('mark-read')
     async handleMarkRead(
@@ -322,7 +341,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
 
             const result = await this.messageService.markMessageAsRead(
                 messageId,
-                new Types.ObjectId(userId)
+                userId,
             );
 
             // Update last seen
