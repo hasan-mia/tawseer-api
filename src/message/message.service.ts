@@ -1,6 +1,7 @@
 import { Conversation } from '@/schemas/conversation.schema';
 import { Message } from '@/schemas/message.schema';
 import { User } from '@/schemas/user.schema';
+import { Vendor } from '@/schemas/vendor.schema';
 import { ChatGateway } from '@/socket/chat.gateway';
 import {
   forwardRef,
@@ -16,6 +17,7 @@ import { CreateMessageDto } from './dto/message.dto';
 @Injectable()
 export class MessageService {
   constructor(
+    @InjectModel(Vendor.name) private readonly vendorModel: Model<Vendor>,
     @InjectModel(Message.name) private messageModel: Model<Message>,
     @InjectModel(Conversation.name) private conversationModel: Model<Conversation>,
     @InjectModel(User.name) private userModel: Model<User>,
@@ -93,30 +95,6 @@ export class MessageService {
         .populate('sender', 'first_name last_name avatar email _id')
         .lean();
 
-      // Emit to all participants in the conversation room
-      if (this.chatGateway && this.chatGateway.server) {
-        this.chatGateway.server
-          .to(`conversation:${conversationId}`)
-          .emit('new-message', {
-            message: populatedMessage,
-            conversationId: conversationId.toString()
-          });
-
-        // Also send notification to users not currently in the conversation room
-        const otherParticipants = conversation.participants.filter(
-          p => p.toString() !== senderId.toString()
-        );
-
-        otherParticipants.forEach(participantId => {
-          this.chatGateway.server
-            .to(`user:${participantId}`)
-            .emit('message-notification', {
-              message: populatedMessage,
-              conversationId: conversationId.toString()
-            });
-        });
-      }
-
       return {
         success: true,
         message: "Message sent successfully",
@@ -133,7 +111,6 @@ export class MessageService {
       const page = req?.query?.page ? parseInt(req.query.page, 10) : 1;
       const limit = req?.query?.limit ? parseInt(req.query.limit, 10) : 10;
       const keyword = req?.query?.keyword || null;
-
       const skip = (page - 1) * limit;
 
       let baseQuery: any = { participants: userId, is_deleted: false };
@@ -146,34 +123,51 @@ export class MessageService {
         ];
       }
 
-      // Count total conversations
       const count = await this.conversationModel.countDocuments(baseQuery);
 
-      // Fetch conversations with pagination
       const conversations = await this.conversationModel
         .find(baseQuery)
         .populate({
           path: "last_message",
           populate: [
-            { path: "sender", select: "first_name last_name avatar email" },
+            { path: "sender", select: "first_name last_name avatar email _id" },
           ],
         })
-        .populate("participants", "first_name last_name avatar email")
+        .populate("participants", "first_name last_name avatar email _id")
         .sort({ updatedAt: -1 })
         .skip(skip)
         .limit(limit)
         .exec();
 
-      // Add unread counts & other participants
       const conversationsWithCounts = await Promise.all(
         conversations.map(async (conv) => {
+          // Count unread messages not from this user
           const unreadCount = await this.messageModel.countDocuments({
-            conversation: conv._id,
+            conversation: conv._id.toString(),
+            sender: { $ne: userId.toString() },
             is_read: false,
             is_deleted: false,
           });
 
-          const otherParticipants = conv.participants.filter(
+          // Map participants: if vendor, replace name/avatar with shopname/logo
+          const participants = await Promise.all(
+            conv.participants.map(async (p: any) => {
+              // Check if participant is a vendor
+              const vendor = await this.vendorModel.findOne({ user: p._id.toString() }).lean();
+              if (vendor) {
+                return {
+                  _id: p._id,
+                  first_name: vendor.name,
+                  last_name: "",
+                  avatar: vendor.logo,
+                  email: p.email
+                };
+              }
+              return p;
+            })
+          );
+
+          const otherParticipants = participants.filter(
             (p) => p._id.toString() !== userId.toString()
           );
 
@@ -181,11 +175,11 @@ export class MessageService {
             ...conv.toObject(),
             other_participants: otherParticipants,
             unread_count: unreadCount,
+            participants, // updated participants list
           };
         })
       );
 
-      // Pagination info
       const totalPages = Math.ceil(count / limit);
       let nextPage: number | null = null;
       let nextUrl: string | null = null;
@@ -215,7 +209,6 @@ export class MessageService {
       throw new InternalServerErrorException(error.message);
     }
   }
-
 
   async getMessagesByConversation(conversationId: string, userId: Types.ObjectId, req: any) {
     try {
@@ -259,7 +252,7 @@ export class MessageService {
       await this.messageModel.updateMany(
         {
           conversation: conversationId,
-          sender: { $ne: userId },
+          sender: { $ne: userId.toString() },
           is_read: false
         },
         {
@@ -314,13 +307,6 @@ export class MessageService {
           nextUrl,
           prevUrl,
         },
-        // Keep these for backward compatibility
-        total,
-        perPage,
-        currentPage,
-        totalPages,
-        nextPage,
-        nextUrl,
       };
     } catch (error) {
       console.error('Error in getMessagesByConversation:', error);
@@ -399,25 +385,25 @@ export class MessageService {
   }
 
   async getUnreadMessageCount(userId: string) {
-    // Find conversations where the user is a participant
+
     const conversations = await this.conversationModel
-      .find({ participants: userId })
+      .find({ participants: userId, is_deleted: false })
       .select('_id');
 
-    const conversationIds = conversations.map((c) => c._id);
+    const conversationIds = conversations.map(c => c._id.toString());
 
-    const data = await this.messageModel.countDocuments({
+    const unreadCount = await this.messageModel.countDocuments({
       conversation: { $in: conversationIds },
-      sender: { $ne: userId },
+      sender: { $ne: userId.toString() },
       is_read: false,
-      is_deleted: false,
+      is_deleted: false
     });
 
     return {
       success: true,
-      message: "Unread found successfully",
-      data: data
-    }
+      message: "Unread messages found successfully",
+      data: unreadCount
+    };
   }
 
 }
