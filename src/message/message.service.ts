@@ -25,14 +25,14 @@ export class MessageService {
     private chatGateway: ChatGateway,
   ) { }
 
-  async findOrCreateConversation(participantIds: Types.ObjectId[]) {
+  async findOrCreateConversation(participantIds: Types.ObjectId[], userId: Types.ObjectId) {
     const sortedIds = [...participantIds].sort((a, b) =>
       a.toString().localeCompare(b.toString()),
     );
 
     let conversation = await this.conversationModel.findOne({
       participants: { $all: sortedIds },
-      $expr: { $eq: [{ $size: '$participants' }, sortedIds.length] },
+      $expr: { $eq: [{ $size: "$participants" }, sortedIds.length] },
     });
 
     if (!conversation) {
@@ -40,12 +40,64 @@ export class MessageService {
         participants: sortedIds,
       });
     }
+
+    // Populate similar to getConversations
+    conversation = await this.conversationModel
+      .findById(conversation._id)
+      .populate({
+        path: "last_message",
+        populate: [{ path: "sender", select: "first_name last_name avatar email _id" }],
+      })
+      .populate("participants", "first_name last_name avatar email _id")
+      .exec();
+
+    // Count unread messages for this user
+    const unreadCount = await this.messageModel.countDocuments({
+      conversation: conversation._id.toString(),
+      sender: { $ne: userId.toString() },
+      is_read: false,
+      is_deleted: false,
+    });
+
+    // Map participants (replace with vendor data if needed)
+    const participants = await Promise.all(
+      conversation.participants.map(async (p: any) => {
+        const vendor = await this.vendorModel.findOne({ user: p._id.toString() }).lean();
+        if (vendor) {
+          return {
+            _id: p._id,
+            first_name: vendor.name,
+            last_name: "",
+            avatar: vendor.logo,
+            email: p.email,
+          };
+        }
+        return p;
+      })
+    );
+
+    const ids = participants.map(p => String(p._id));
+    if (!ids.includes(String(userId))) {
+      throw new NotFoundException("Conversation not found");
+    }
+
+    const otherParticipants = participants.filter(
+      (p) => String(p._id) !== String(userId)
+    );
+
     return {
       success: true,
-      message: "Start conversation successfully",
-      data: conversation
+      message: "Conversation ready",
+      data: {
+        ...conversation.toObject(),
+        last_message: conversation.last_message || null,
+        participants,
+        other_participants: otherParticipants,
+        unread_count: unreadCount,
+      },
     };
-  };
+  }
+
 
   async sendMessage(createMessageDto: CreateMessageDto) {
     try {
@@ -206,6 +258,68 @@ export class MessageService {
       };
     } catch (error) {
       console.error("Error in getConversations:", error);
+      throw new InternalServerErrorException(error.message);
+    }
+  }
+
+  async getConversation(conversationId: Types.ObjectId, userId: Types.ObjectId) {
+    try {
+      let conversation = await this.conversationModel
+        .findById(conversationId)
+        .populate({
+          path: "last_message",
+          populate: [
+            { path: "sender", select: "first_name last_name avatar email _id" },
+          ],
+        })
+        .populate("participants", "first_name last_name avatar email _id")
+        .exec();
+
+      if (!conversation) {
+        throw new NotFoundException("Conversation not found");
+      }
+
+      // Count unread messages not from this user
+      const unreadCount = await this.messageModel.countDocuments({
+        conversation: conversation._id.toString(),
+        sender: { $ne: userId.toString() },
+        is_read: false,
+        is_deleted: false,
+      });
+
+      // Map participants (replace with vendor data if needed)
+      const participants = await Promise.all(
+        conversation.participants.map(async (p: any) => {
+          const vendor = await this.vendorModel.findOne({ user: p._id.toString() }).lean();
+          if (vendor) {
+            return {
+              _id: p._id,
+              first_name: vendor.name,
+              last_name: "",
+              avatar: vendor.logo,
+              email: p.email,
+            };
+          }
+          return p;
+        })
+      );
+
+      const otherParticipants = participants.filter(
+        (p) => p._id.toString() !== userId.toString()
+      );
+
+      return {
+        success: true,
+        message: "Conversation fetched successfully",
+        data: {
+          ...conversation.toObject(),
+          participants,
+          other_participants: otherParticipants,
+          unread_count: unreadCount,
+        },
+      };
+    } catch (error) {
+      console.error("Error in getConversation:", error);
       throw new InternalServerErrorException(error.message);
     }
   }

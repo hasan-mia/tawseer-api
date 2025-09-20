@@ -23,9 +23,9 @@ export class MessageController {
   // Start a new conversation between two users
   @Post('start')
   @UseGuards(JwtAuthGuard)
-  async createConversation(@Body('participantIds') participantIds: string[]) {
+  async createConversation(@Body('participantIds') participantIds: string[], @Request() req) {
     const objectIds = participantIds.map((id) => new Types.ObjectId(id));
-    return this.messageService.findOrCreateConversation(objectIds);
+    return this.messageService.findOrCreateConversation(objectIds, req.user._id);
   }
 
   // Send a message inside an existing conversation
@@ -52,6 +52,20 @@ export class MessageController {
   @UseGuards(JwtAuthGuard)
   async getUnreadCount(@Request() req) {
     return await this.messageService.getUnreadMessageCount(req.user._id);
+  }
+
+  // Get a specific conversation
+  @Get('conversation/:conversationId')
+  @UseGuards(JwtAuthGuard)
+  async getConversation(
+    @Param('conversationId') conversationId: string,
+    @Request() req,
+  ) {
+    const convId = new Types.ObjectId(conversationId)
+    return this.messageService.getConversation(
+      convId,
+      req.user._id,
+    );
   }
 
   // Get messages from a specific conversation with pagination
