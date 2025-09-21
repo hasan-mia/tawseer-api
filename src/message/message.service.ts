@@ -147,6 +147,22 @@ export class MessageService {
         .populate('sender', 'first_name last_name avatar email _id')
         .lean();
 
+      // Notify all participants except sender about new message
+      const participants = conversation.participants.filter(
+        (participant: any) => participant._id.toString() !== senderId.toString()
+      );
+
+      // Get unread count for each participant and notify them
+      await Promise.all(participants.map(async (participant: any) => {
+        const participantId = participant._id.toString();
+
+        // Get unread count for this participant
+        const data = await this.getUnreadMessageCount(participantId);
+
+        // Notify via WebSocket
+        this.chatGateway.notifyUserOfNewMessages(participantId, data?.data);
+      }));
+
       return {
         success: true,
         message: "Message sent successfully",

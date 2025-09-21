@@ -35,11 +35,11 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     @WebSocketServer()
     public server: Server;
 
-    // Keep track of connected users with more detailed info
+    // Enhanced user tracking
     private connectedUsers = new Map<string, ConnectedUser>();
-
-    // Track users currently typing in conversations
+    private userSockets = new Map<string, Set<string>>(); // userId -> Set of socketIds
     private typingUsers = new Map<string, Set<string>>();
+    private statusBroadcastQueue = new Map<string, NodeJS.Timeout>();
 
     constructor(
         @InjectModel(Conversation.name)
@@ -61,7 +61,6 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         try {
             console.log(`Client attempting connection: ${socket.id}`);
 
-            // Extract token from various possible locations
             const token = socket.handshake.auth.token ||
                 socket.handshake.headers.authorization?.split(' ')[1] ||
                 socket.handshake.query.token;
@@ -73,61 +72,45 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
                 return;
             }
 
-            try {
-                // Verify the token
-                const payload = this.jwtService.verify(token);
-                const userId = payload.sub || payload.id || payload._id;
+            const payload = this.jwtService.verify(token);
+            const userId = payload.sub || payload.id || payload._id;
 
-                if (!userId) {
-                    throw new Error('Invalid user ID in token');
-                }
-
-                // Remove any existing connection for this user
-                const existingUser = Array.from(this.connectedUsers.entries())
-                    .find(([_, user]) => user.userId === userId);
-
-                if (existingUser) {
-                    const [oldSocketId] = existingUser;
-                    this.connectedUsers.delete(oldSocketId);
-
-                    // Disconnect the old socket if it still exists
-                    const oldSocket = this.server.sockets.sockets.get(oldSocketId);
-                    if (oldSocket) {
-                        oldSocket.disconnect();
-                    }
-                }
-
-                // Store the new user connection
-                this.connectedUsers.set(socket.id, {
-                    userId: userId.toString(),
-                    socketId: socket.id,
-                    joinedAt: new Date(),
-                    lastSeen: new Date()
-                });
-
-                // Join user to their personal room for targeted messages
-                socket.join(`user:${userId}`);
-
-                // Store userId in socket data for easy access
-                socket.data.userId = userId.toString();
-                socket.data.authenticated = true;
-
-                console.log(`User ${userId} authenticated and connected with socket ${socket.id}`);
-
-                // Emit connection success
-                socket.emit('connection_success', {
-                    message: 'Successfully connected',
-                    userId: userId.toString()
-                });
-
-            } catch (jwtError) {
-                console.log(`Invalid token, disconnecting socket: ${socket.id}`, jwtError.message);
-                socket.emit('auth_error', { message: 'Invalid authentication token' });
-                socket.disconnect();
+            if (!userId) {
+                throw new Error('Invalid user ID in token');
             }
+
+            // Handle multiple connections for same user (different devices/tabs)
+            if (!this.userSockets.has(userId)) {
+                this.userSockets.set(userId, new Set());
+            }
+            this.userSockets.get(userId).add(socket.id);
+
+            // Store connection info
+            this.connectedUsers.set(socket.id, {
+                userId: userId.toString(),
+                socketId: socket.id,
+                joinedAt: new Date(),
+                lastSeen: new Date()
+            });
+
+            // Join user to their personal room
+            socket.join(`user:${userId}`);
+            socket.data.userId = userId.toString();
+            socket.data.authenticated = true;
+
+            console.log(`User ${userId} authenticated with socket ${socket.id}`);
+
+            // Broadcast user came online (debounced)
+            this.debouncedStatusBroadcast(userId.toString(), true);
+
+            socket.emit('connection_success', {
+                message: 'Successfully connected',
+                userId: userId.toString()
+            });
+
         } catch (error) {
             console.error('Socket connection error:', error);
-            socket.emit('connection_error', { message: 'Connection failed' });
+            socket.emit('auth_error', { message: 'Invalid authentication token' });
             socket.disconnect();
         }
     }
@@ -135,17 +118,29 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     handleDisconnect(socket: Socket) {
         console.log(`Client disconnected: ${socket.id}`);
 
-        // Remove user from connected users map
         const connectedUser = this.connectedUsers.get(socket.id);
         if (connectedUser) {
+            const userId = connectedUser.userId;
+
+            // Remove from connected users
             this.connectedUsers.delete(socket.id);
-            console.log(`User ${connectedUser.userId} disconnected`);
 
-            // Remove from all typing indicators
-            this.removeFromAllTyping(connectedUser.userId);
+            // Remove socket from user's socket set
+            const userSocketSet = this.userSockets.get(userId);
+            if (userSocketSet) {
+                userSocketSet.delete(socket.id);
 
-            // Emit user offline status to their conversations
-            this.broadcastUserStatus(connectedUser.userId, false);
+                // If no more sockets for this user, they're offline
+                if (userSocketSet.size === 0) {
+                    this.userSockets.delete(userId);
+
+                    // Remove from typing and broadcast offline status
+                    this.removeFromAllTyping(userId);
+                    this.debouncedStatusBroadcast(userId, false);
+                }
+            }
+
+            console.log(`User ${userId} disconnected. Remaining connections: ${userSocketSet?.size || 0}`);
         }
     }
 
@@ -177,6 +172,11 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
 
             socket.join(`conversation:${conversationId}`);
             console.log(`Socket ${socket.id} (User ${userId}) joined conversation: ${conversationId}`);
+
+            // Debug: Log all sockets in this room
+            const room = this.server.sockets.adapter.rooms.get(`conversation:${conversationId}`);
+            console.log(`Room conversation:${conversationId} now has ${room?.size} members`);
+
 
             this.updateUserLastSeen(socket.id);
 
@@ -315,6 +315,11 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
                 tempId: data.tempId
             });
 
+            socket.to(`conversation:${conversationId}`).emit('new-message', {
+                message: messageResult.data,
+                conversationId: conversationId
+            });
+
         } catch (error) {
             console.error('Error handling send message:', error);
             socket.emit('message-failure', {
@@ -391,26 +396,86 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     }
 
     @SubscribeMessage('get-online-status')
-    handleGetOnlineStatus(
+    async handleGetOnlineStatus(
+        @ConnectedSocket() socket: Socket,
+        @MessageBody() data: { userIds: string[]; conversationId?: string }
+    ) {
+        try {
+            if (!socket.data.authenticated) {
+                socket.emit('get-online-status', { success: false, error: 'Not authenticated' });
+                return;
+            }
+
+            const { userIds, conversationId } = data;
+
+            // Get online status for requested users
+            const onlineStatus = userIds.reduce((acc, userId) => {
+                acc[userId] = this.isUserOnline(userId);
+                return acc;
+            }, {} as Record<string, boolean>);
+
+            // Get last seen info (you'd implement this with a database)
+            const lastSeenInfo = await this.getLastSeenInfo(userIds);
+
+            socket.emit('get-online-status', {
+                success: true,
+                status: onlineStatus,
+                lastSeen: lastSeenInfo,
+                timestamp: new Date()
+            });
+
+            // If conversation provided, also get conversation-specific presence
+            if (conversationId) {
+                const conversationPresence = await this.getConversationPresence(conversationId);
+                socket.emit('conversation-presence', {
+                    conversationId,
+                    presence: conversationPresence,
+                    timestamp: new Date()
+                });
+            }
+
+        } catch (error) {
+            console.error('Error getting online status:', error);
+            socket.emit('get-online-status', { success: false, error: error.message });
+        }
+    }
+
+    @SubscribeMessage('subscribe-user-status')
+    async handleSubscribeUserStatus(
         @ConnectedSocket() socket: Socket,
         @MessageBody() data: { userIds: string[] }
     ) {
         try {
             if (!socket.data.authenticated) {
-                return { event: 'get-online-status', data: { success: false, error: 'Not authenticated' } };
+                socket.emit('subscribe-user-status', { success: false, error: 'Not authenticated' });
+                return;
             }
 
-            const onlineStatus = data.userIds.reduce((acc, userId) => {
-                const isOnline = Array.from(this.connectedUsers.values())
-                    .some(user => user.userId === userId);
-                acc[userId] = isOnline;
-                return acc;
-            }, {} as Record<string, boolean>);
+            const { userIds } = data;
 
-            return { event: 'get-online-status', data: { success: true, status: onlineStatus } };
+            // Join rooms for status updates of specific users
+            userIds.forEach(userId => {
+                socket.join(`status-updates:${userId}`);
+            });
+
+            socket.emit('subscribe-user-status', {
+                success: true,
+                subscribedTo: userIds,
+                message: 'Subscribed to user status updates'
+            });
+
         } catch (error) {
-            console.error('Error getting online status:', error);
-            return { event: 'get-online-status', data: { success: false, error: error.message } };
+            console.error('Error subscribing to user status:', error);
+            socket.emit('subscribe-user-status', { success: false, error: error.message });
+        }
+    }
+
+    // Heartbeat to update last seen
+    @SubscribeMessage('heartbeat')
+    handleHeartbeat(@ConnectedSocket() socket: Socket) {
+        if (socket.data.authenticated) {
+            this.updateUserLastSeen(socket.id);
+            socket.emit('heartbeat-ack', { timestamp: new Date() });
         }
     }
 
@@ -458,16 +523,112 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         }
     }
 
+    private debouncedStatusBroadcast(userId: string, isOnline: boolean, delay: number = 1000) {
+        // Clear existing timeout for this user
+        const existingTimeout = this.statusBroadcastQueue.get(userId);
+        if (existingTimeout) {
+            clearTimeout(existingTimeout);
+        }
+
+        // Set new timeout
+        const timeout = setTimeout(() => {
+            this.broadcastUserStatus(userId, isOnline);
+            this.statusBroadcastQueue.delete(userId);
+        }, delay);
+
+        this.statusBroadcastQueue.set(userId, timeout);
+    }
+
     private broadcastUserStatus(userId: string, isOnline: boolean) {
-        // Broadcast to all users who might be interested
-        // You might want to implement a more sophisticated system here
-        this.server.emit('user-status-change', {
+        // Broadcast to subscribers of this user's status
+        this.server.to(`status-updates:${userId}`).emit('user-status-change', {
             userId,
             isOnline,
             timestamp: new Date()
         });
+
+        console.log(`Broadcasted status change: User ${userId} is ${isOnline ? 'online' : 'offline'}`);
     }
 
+    private async getLastSeenInfo(userIds: string[]): Promise<Record<string, Date | null>> {
+        // Implement this method to fetch last seen from database
+        // For now, return current connected users' last seen or null
+        const lastSeenInfo: Record<string, Date | null> = {};
+
+        userIds.forEach(userId => {
+            // Find any socket for this user
+            const userSocketSet = this.userSockets.get(userId);
+            if (userSocketSet && userSocketSet.size > 0) {
+                // User is online, get their latest last seen
+                const socketId = Array.from(userSocketSet)[0];
+                const connectedUser = this.connectedUsers.get(socketId);
+                lastSeenInfo[userId] = connectedUser?.lastSeen || null;
+            } else {
+                // User is offline, you'd fetch from database here
+                lastSeenInfo[userId] = null; // Or fetch from DB
+            }
+        });
+
+        return lastSeenInfo;
+    }
+
+    private async getConversationPresence(conversationId: string): Promise<Record<string, boolean>> {
+        // Get all participants in the conversation
+        const conversation = await this.conversationModel.findById(conversationId).populate('participants');
+        if (!conversation) return {};
+
+        const presence: Record<string, boolean> = {};
+        conversation.participants.forEach((participant: any) => {
+            const userId = participant._id.toString();
+            presence[userId] = this.isUserOnline(userId);
+        });
+
+        return presence;
+    }
+
+    // Public method to notify users (can be called from other services)
+    async notifyUserOfNewMessages(userId: string, unreadCount: number) {
+        const userConnection = Array.from(this.connectedUsers.values())
+            .find(user => user.userId === userId);
+
+        if (userConnection) {
+            this.server.to(`user:${userId}`).emit('unread-count-update', {
+                unreadCount,
+                timestamp: new Date()
+            });
+        }
+    }
+
+
+    // Get connected users count
+    public isUserOnline(userId: string): boolean {
+        const userSocketSet = this.userSockets.get(userId);
+        return userSocketSet ? userSocketSet.size > 0 : false;
+    }
+
+    public getUserConnectionCount(userId: string): number {
+        const userSocketSet = this.userSockets.get(userId);
+        return userSocketSet ? userSocketSet.size : 0;
+    }
+
+    public getOnlineUsers(): string[] {
+        return Array.from(this.userSockets.keys());
+    }
+
+    public getTotalConnections(): number {
+        return this.connectedUsers.size;
+    }
+
+    public getUniqueOnlineUsers(): number {
+        return this.userSockets.size;
+    }
+
+    // Method to be called from other services
+    public async notifyUserStatusChange(userId: string, isOnline: boolean) {
+        this.broadcastUserStatus(userId, isOnline);
+    }
+
+    // Cleanup method
     private cleanupStaleConnections() {
         const now = new Date();
         const staleThreshold = 10 * 60 * 1000; // 10 minutes
@@ -485,29 +646,5 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
                 this.removeFromAllTyping(user.userId);
             }
         }
-    }
-
-    // Public method to notify users (can be called from other services)
-    async notifyUserOfNewMessages(userId: string, unreadCount: number) {
-        const userConnection = Array.from(this.connectedUsers.values())
-            .find(user => user.userId === userId);
-
-        if (userConnection) {
-            this.server.to(`user:${userId}`).emit('unread-count-update', {
-                unreadCount,
-                timestamp: new Date()
-            });
-        }
-    }
-
-    // Get connected users count
-    getConnectedUsersCount(): number {
-        return this.connectedUsers.size;
-    }
-
-    // Check if user is online
-    isUserOnline(userId: string): boolean {
-        return Array.from(this.connectedUsers.values())
-            .some(user => user.userId === userId);
     }
 }
