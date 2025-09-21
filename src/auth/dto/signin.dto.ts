@@ -1,5 +1,5 @@
 /* eslint-disable prettier/prettier */
-import { IsEmail, IsNotEmpty, IsStrongPassword } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, IsStrongPassword } from 'class-validator';
 
 export class SignInDto {
   @IsNotEmpty()
@@ -16,4 +16,8 @@ export class SignInDto {
   })
   @IsNotEmpty()
   readonly password?: string;
+
+  @IsOptional()
+  @IsString()
+  readonly fcmToken?: string;
 }

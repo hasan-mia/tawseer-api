@@ -4,6 +4,7 @@ import {
   IsEnum,
   IsNotEmpty,
   IsOptional,
+  IsString,
   IsStrongPassword,
 } from 'class-validator';
 
@@ -16,6 +17,14 @@ export enum UserRole {
 }
 
 export class SignUpDto {
+  @IsNotEmpty()
+  @IsString()
+  readonly first_name: string;
+
+  @IsNotEmpty()
+  @IsString()
+  readonly last_name: string;
+
   @IsNotEmpty()
   @IsEmail({}, { message: 'Please enter valid email' })
   readonly email: string;
@@ -36,4 +45,12 @@ export class SignUpDto {
     message: 'Role must be one of: user, vendor, editor, admin, super_admin',
   })
   readonly role?: UserRole;
+
+  @IsOptional()
+  @IsString()
+  readonly birth_date?: string;
+
+  @IsOptional()
+  @IsString()
+  readonly fcmToken?: string;
 }

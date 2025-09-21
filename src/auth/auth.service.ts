@@ -36,7 +36,7 @@ export class AuthService {
   // =============== Sign up  with email & password=================
 
   async signUp(data: SignUpDto) {
-    const { email, password, role } = data;
+    const { first_name, last_name, birth_date, fcmToken, email, password, role } = data;
     const exist = await this.userModel.findOne({ email });
 
     if (exist) {
@@ -48,9 +48,13 @@ export class AuthService {
 
     try {
       const user = await this.userModel.create({
+        first_name,
+        last_name,
         email,
         password: hashedPassword,
         role: role ?? UserRole.User,
+        birth_date,
+        fcmToken,
       });
 
       await user.save();
@@ -76,7 +80,7 @@ export class AuthService {
 
   // =========SignIn with email & password =============
   async signIn(data: SignInDto) {
-    const { email, password } = data;
+    const { email, password, fcmToken } = data;
 
     try {
       const user = await this.userModel.findOne({ email });
@@ -89,6 +93,10 @@ export class AuthService {
 
       if (!isPasswordMatched) {
         throw new NotFoundException('Password is wrong.');
+      }
+
+      if (fcmToken) {
+        await this.userModel.findOneAndUpdate({ email }, { fcmToken });
       }
 
       const data = { id: user._id, role: user.role };
