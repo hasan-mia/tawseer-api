@@ -98,7 +98,6 @@ export class MessageService {
     };
   }
 
-
   async sendMessage(createMessageDto: CreateMessageDto) {
     try {
       const { senderId, conversationId, content, attachments } = createMessageDto;
@@ -127,8 +126,6 @@ export class MessageService {
         attachments: attachments || [],
         is_read: false,
         is_deleted: false,
-        createdAt: new Date(),
-        updatedAt: new Date()
       });
 
       // Update conversation's last message and timestamp
@@ -136,37 +133,68 @@ export class MessageService {
         conversationId,
         {
           last_message: newMessage._id,
-          updatedAt: new Date(),
         },
         { new: true }
       );
 
-      // Populate the message with sender info
-      const populatedMessage = await this.messageModel
-        .findById(newMessage._id)
-        .populate('sender', 'first_name last_name avatar email _id')
+      // Fetch sender info separately
+      const senderInfo = await this.userModel
+        .findById(senderId)
+        .select('first_name last_name avatar email _id')
         .lean();
 
-      // Notify all participants except sender about new message
-      const participants = conversation.participants.filter(
+      // Check if sender is a vendor
+      const vendor = await this.vendorModel.findOne({ user: senderId.toString() }).lean();
+
+      const displaySender = vendor ? {
+        _id: senderInfo._id.toString(),
+        first_name: vendor.name,
+        last_name: "",
+        avatar: vendor.logo,
+        email: senderInfo.email,
+      } : {
+        _id: senderInfo._id.toString(),
+        first_name: senderInfo.first_name,
+        last_name: senderInfo.last_name,
+        avatar: senderInfo.avatar,
+        email: senderInfo.email,
+      };
+
+      // Use type assertion to access timestamp properties
+      const messageDoc = newMessage as any;
+
+      // Create response object
+      const messageForResponse = {
+        _id: messageDoc._id.toString(),
+        uuid: messageDoc.uuid,
+        conversation: messageDoc.conversation.toString(),
+        sender: displaySender,
+        content: messageDoc.content,
+        attachments: messageDoc.attachments || [],
+        is_read: messageDoc.is_read,
+        is_deleted: messageDoc.is_deleted,
+        createdAt: messageDoc.createdAt || new Date(),
+        updatedAt: messageDoc.updatedAt || new Date(),
+      };
+
+      // Get other participants (not the sender)
+      const otherParticipants = conversation.participants.filter(
         (participant: any) => participant._id.toString() !== senderId.toString()
       );
 
-      // Get unread count for each participant and notify them
-      await Promise.all(participants.map(async (participant: any) => {
+      // Update unread counts for other participants
+      await Promise.all(otherParticipants.map(async (participant: any) => {
         const participantId = participant._id.toString();
+        const unreadData = await this.getUnreadMessageCount(participantId);
 
-        // Get unread count for this participant
-        const data = await this.getUnreadMessageCount(participantId);
-
-        // Notify via WebSocket
-        this.chatGateway.notifyUserOfNewMessages(participantId, data?.data);
+        // Notify via WebSocket about unread count change
+        this.chatGateway.notifyUserOfNewMessages(participantId, unreadData?.data);
       }));
 
       return {
         success: true,
         message: "Message sent successfully",
-        data: populatedMessage
+        data: messageForResponse
       };
     } catch (error) {
       console.error('Error in sendMessage:', error);
