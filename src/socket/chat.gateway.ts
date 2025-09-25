@@ -289,17 +289,11 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
             this.updateUserLastSeen(socket.id);
             this.removeFromTyping(conversationId, senderId);
 
-            // ADD DUPLICATE PREVENTION
-            // const messageKey = `${senderId}-${conversationId}-${Date.now()}`;
-            // if (this.processingMessages.has(messageKey)) {
-            //     console.log('Duplicate message processing prevented:', messageKey);
-            //     return;
-            // }
-            // Only prevent duplicates from the same socket with same tempId
+            // duplicate prevention
             const messageKey = `${socket.id}-${data.tempId}`;
             if (this.processingMessages.has(messageKey)) {
-                console.log('Ignoring duplicate from same socket');
-                return;
+                console.log('Ignoring duplicate from same socket with same tempId');
+                return; // Just ignore, don't send any response
             }
             this.processingMessages.add(messageKey);
 
@@ -312,57 +306,43 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
                     attachments: attachments || []
                 });
 
-                if (messageResult.success) {
-                    if (messageResult.data) {
-                        // New message created or existing message returned
-                        console.log(`Message processed successfully in conversation ${conversationId}`);
+                if (messageResult.success && messageResult.data) {
+                    console.log(`Message sent successfully in conversation ${conversationId}`);
 
-                        // Emit success to sender
-                        socket.emit('send-message', {
-                            success: true,
+                    // Emit success to sender
+                    socket.emit('send-message', {
+                        success: true,
+                        message: messageResult.data,
+                        tempId: data.tempId
+                    });
+
+                    // Broadcast to other participants in the room
+                    this.server.to(`conversation:${conversationId}`)
+                        .except(socket.id)
+                        .emit('new-message', {
                             message: messageResult.data,
-                            tempId: data.tempId
+                            conversationId,
                         });
-
-                        // Only broadcast to others if it's a new message (not duplicate)
-                        if (messageResult.message === "Message sent successfully") {
-                            this.server.to(`conversation:${conversationId}`)
-                                .except(socket.id)
-                                .emit('new-message', {
-                                    message: messageResult.data,
-                                    conversationId,
-                                });
-                        }
-                    } else {
-                        // Duplicate prevented gracefully
-                        console.log(`Duplicate message prevented gracefully for conversation ${conversationId}`);
-                        socket.emit('send-message', {
-                            success: true,
-                            message: null,
-                            tempId: data.tempId,
-                            note: 'Duplicate message prevented'
-                        });
-                    }
                 } else {
                     socket.emit('message-failure', {
                         success: false,
-                        error: messageResult.message || 'Failed to save message',
+                        error: 'Failed to save message',
                         tempId: data.tempId
                     });
                 }
 
             } finally {
-                // Clean up duplicate prevention
+                // Clean up duplicate prevention after 2 seconds
                 setTimeout(() => {
                     this.processingMessages.delete(messageKey);
-                }, 5000);
+                }, 2000);
             }
 
         } catch (error) {
-            // console.error('Error handling send message:', error);
+            console.error('Error handling send message:', error);
             socket.emit('message-failure', {
                 success: false,
-                error: error.message,
+                error: error.message || 'Internal server error',
                 tempId: data.tempId
             });
         }
