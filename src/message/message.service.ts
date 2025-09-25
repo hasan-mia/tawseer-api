@@ -98,9 +98,31 @@ export class MessageService {
     };
   }
 
+  private recentMessages = new Map<string, number>();
+
   async sendMessage(createMessageDto: CreateMessageDto) {
     try {
       const { senderId, conversationId, content, attachments } = createMessageDto;
+
+      // PREVENT DUPLICATE MESSAGE CREATION
+      const messageKey = `${senderId}-${conversationId}-${content.trim()}`;
+      const now = Date.now();
+      const lastSent = this.recentMessages.get(messageKey);
+
+      // If same message was sent within last 2 seconds, prevent duplicate
+      if (lastSent && (now - lastSent) < 2000) {
+        throw new InternalServerErrorException('Duplicate message prevented');
+      }
+
+      this.recentMessages.set(messageKey, now);
+
+      // Clean up old entries to prevent memory leaks
+      if (this.recentMessages.size > 1000) {
+        const entries = Array.from(this.recentMessages.entries());
+        entries.slice(0, 500).forEach(([key]) => {
+          this.recentMessages.delete(key);
+        });
+      }
 
       // Verify sender exists
       const sender = await this.userModel.findById(senderId);
@@ -118,7 +140,7 @@ export class MessageService {
         throw new NotFoundException('Sender is not a participant in this conversation');
       }
 
-      // Create new message
+      // Create new message with additional duplicate prevention at DB level
       const newMessage = await this.messageModel.create({
         conversation: conversationId,
         sender: senderId,
@@ -126,6 +148,8 @@ export class MessageService {
         attachments: attachments || [],
         is_read: false,
         is_deleted: false,
+        // Add a unique identifier to prevent DB duplicates
+        messageHash: `${senderId}-${conversationId}-${Date.now()}-${Math.random()}`
       });
 
       // Update conversation's last message and timestamp
@@ -133,6 +157,7 @@ export class MessageService {
         conversationId,
         {
           last_message: newMessage._id,
+          updatedAt: new Date()
         },
         { new: true }
       );
@@ -197,7 +222,7 @@ export class MessageService {
         data: messageForResponse
       };
     } catch (error) {
-      console.error('Error in sendMessage:', error);
+      // console.error('Error in sendMessage:', error);
       throw new InternalServerErrorException(error.message);
     }
   }

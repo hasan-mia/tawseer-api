@@ -289,46 +289,77 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
             this.updateUserLastSeen(socket.id);
             this.removeFromTyping(conversationId, senderId);
 
-            // Save message to database
-            const messageResult = await this.messageService.sendMessage({
-                senderId,
-                conversationId,
-                content: content.trim(),
-                attachments: attachments || []
-            });
-
-            if (!messageResult.success) {
-                socket.emit('message-failure', {
-                    success: false,
-                    error: 'Failed to save message',
-                    tempId: data.tempId
-                });
+            // ADD DUPLICATE PREVENTION
+            // const messageKey = `${senderId}-${conversationId}-${Date.now()}`;
+            // if (this.processingMessages.has(messageKey)) {
+            //     console.log('Duplicate message processing prevented:', messageKey);
+            //     return;
+            // }
+            // Only prevent duplicates from the same socket with same tempId
+            const messageKey = `${socket.id}-${data.tempId}`;
+            if (this.processingMessages.has(messageKey)) {
+                console.log('Ignoring duplicate from same socket');
                 return;
             }
+            this.processingMessages.add(messageKey);
 
-            console.log(`Message sent successfully in conversation ${conversationId}`);
-
-            // Emit success to sender
-            socket.emit('send-message', {
-                success: true,
-                message: messageResult.data,
-                tempId: data.tempId
-            });
-
-            // socket.to(`conversation:${conversationId}`).emit('new-message', {
-            //     message: messageResult.data,
-            //     conversationId: conversationId,
-            // });
-
-            this.server.to(`conversation:${conversationId}`)
-                .except(socket.id)
-                .emit('new-message', {
-                    message: messageResult.data,
+            try {
+                // Save message to database
+                const messageResult = await this.messageService.sendMessage({
+                    senderId,
                     conversationId,
+                    content: content.trim(),
+                    attachments: attachments || []
                 });
 
+                if (messageResult.success) {
+                    if (messageResult.data) {
+                        // New message created or existing message returned
+                        console.log(`Message processed successfully in conversation ${conversationId}`);
+
+                        // Emit success to sender
+                        socket.emit('send-message', {
+                            success: true,
+                            message: messageResult.data,
+                            tempId: data.tempId
+                        });
+
+                        // Only broadcast to others if it's a new message (not duplicate)
+                        if (messageResult.message === "Message sent successfully") {
+                            this.server.to(`conversation:${conversationId}`)
+                                .except(socket.id)
+                                .emit('new-message', {
+                                    message: messageResult.data,
+                                    conversationId,
+                                });
+                        }
+                    } else {
+                        // Duplicate prevented gracefully
+                        console.log(`Duplicate message prevented gracefully for conversation ${conversationId}`);
+                        socket.emit('send-message', {
+                            success: true,
+                            message: null,
+                            tempId: data.tempId,
+                            note: 'Duplicate message prevented'
+                        });
+                    }
+                } else {
+                    socket.emit('message-failure', {
+                        success: false,
+                        error: messageResult.message || 'Failed to save message',
+                        tempId: data.tempId
+                    });
+                }
+
+            } finally {
+                // Clean up duplicate prevention
+                setTimeout(() => {
+                    this.processingMessages.delete(messageKey);
+                }, 5000);
+            }
+
         } catch (error) {
-            console.error('Error handling send message:', error);
+            // console.error('Error handling send message:', error);
             socket.emit('message-failure', {
                 success: false,
                 error: error.message,
@@ -336,6 +367,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
             });
         }
     }
+
 
 
     @SubscribeMessage('mark-read')
@@ -487,6 +519,8 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     }
 
     // Helper methods
+    private processingMessages = new Set<string>();
+
     private updateUserLastSeen(socketId: string) {
         const user = this.connectedUsers.get(socketId);
         if (user) {
