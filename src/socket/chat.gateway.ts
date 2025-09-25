@@ -309,23 +309,25 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
             console.log(`Message sent successfully in conversation ${conversationId}`);
 
             // Emit success to sender
-            socket.emit('send-message', {
-                success: true,
-                message: messageResult.data,
-                tempId: data.tempId
-            });
-
-            // socket.to(`conversation:${conversationId}`).emit('new-message', {
+            // socket.emit('send-message', {
+            //     success: true,
             //     message: messageResult.data,
-            //     conversationId: conversationId
+            //     tempId: data.tempId
             // });
 
-            this.server.to(`conversation:${conversationId}`)
-                .except(socket.id)
-                .emit('new-message', {
-                    message: messageResult.data,
-                    conversationId
-                });
+            socket.to(`conversation:${conversationId}`).emit('new-message', {
+                message: messageResult.data,
+                conversationId: conversationId,
+                tempId: data.tempId,
+            });
+
+            // this.server.to(`conversation:${conversationId}`)
+            //     .except(socket.id)
+            //     .emit('new-message', {
+            //         message: messageResult.data,
+            //         conversationId,
+            //         tempId: data.tempId
+            //     });
 
         } catch (error) {
             console.error('Error handling send message:', error);
