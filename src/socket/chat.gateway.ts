@@ -293,7 +293,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
             const messageKey = `${socket.id}-${data.tempId}`;
             if (this.processingMessages.has(messageKey)) {
                 console.log('Ignoring duplicate from same socket with same tempId');
-                return; // Just ignore, don't send any response
+                return;
             }
             this.processingMessages.add(messageKey);
 
@@ -339,12 +339,15 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
             }
 
         } catch (error) {
-            console.error('Error handling send message:', error);
-            socket.emit('message-failure', {
-                success: false,
-                error: error.message || 'Internal server error',
-                tempId: data.tempId
-            });
+            if (error.message !== "Duplicate message prevented") {
+                socket.emit('message-failure', {
+                    success: false,
+                    error: error.message || 'Internal server error',
+                    tempId: data.tempId
+                });
+                console.error('Error handling send message:', error);
+            }
+
         }
     }
 
