@@ -2,7 +2,7 @@
 import * as ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import { Injectable } from '@nestjs/common';
 import { UploadApiErrorResponse, UploadApiResponse, v2 } from 'cloudinary';
-import * as ffmpeg from 'fluent-ffmpeg';
+import ffmpeg from 'fluent-ffmpeg';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as streamifier from 'streamifier';
