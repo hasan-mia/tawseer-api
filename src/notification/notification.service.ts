@@ -14,6 +14,7 @@ export class NotificationService {
   constructor(
     @InjectModel(Notification.name) private notificationModel: Model<Notification>,
     @InjectModel(User.name) private userModel: Model<User>,
+
   ) { }
 
   // Create and send notification

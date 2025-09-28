@@ -67,4 +67,12 @@ export class AuthController {
     const user = req.user;
     return this.authService.getMyInfo(user.id);
   }
+
+  // ======== Update Fcm ========
+  @Put('update-fcm-token')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  async updateFcmToken(@Request() req, @Body() data: { fcmToken: string }) {
+    return this.authService.updateFcmToken(req.user.id, data.fcmToken);
+  }
 }

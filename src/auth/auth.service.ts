@@ -263,4 +263,36 @@ export class AuthService {
       throw new Error(`Failed to get vehicle: ${error.message}`);
     }
   }
+
+  // Update FCM TOKEN
+  async updateFcmToken(userId: string, fcmToken: string) {
+    try {
+      const user = await this.userModel.findByIdAndUpdate(
+        userId,
+        { fcmToken },
+        { new: true }
+      );
+
+      if (!user) {
+        throw new NotFoundException('User not found');
+      }
+
+      // Clear Redis cache for user info
+      const cacheKey = `myInfo${userId}`;
+      await this.redisCacheService.del(cacheKey);
+
+      return {
+        success: true,
+        message: 'FCM token updated successfully',
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Failed to update FCM token');
+    }
+
+  }
+
+
 }

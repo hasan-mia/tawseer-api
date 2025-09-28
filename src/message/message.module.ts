@@ -1,4 +1,5 @@
 import { CloudinaryService } from '@/cloudinary/cloudinary.service';
+import { NotificationModule } from '@/notification/notification.module';
 import { RedisCacheService } from '@/rediscloud.service';
 import { ConversationSchema } from '@/schemas/conversation.schema';
 import { MessageSchema } from '@/schemas/message.schema';
@@ -33,6 +34,7 @@ import { MessageService } from './message.service';
       { name: 'Message', schema: MessageSchema },
       { name: 'Conversation', schema: ConversationSchema },
     ]),
+    NotificationModule,
   ],
   controllers: [MessageController],
   providers: [MessageService, ChatGateway, CloudinaryService, RedisCacheService],

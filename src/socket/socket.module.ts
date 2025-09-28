@@ -1,4 +1,5 @@
 import { MessageModule } from '@/message/message.module';
+import { NotificationModule } from '@/notification/notification.module';
 import { ConversationSchema } from '@/schemas/conversation.schema';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
@@ -8,6 +9,7 @@ import { SocketGateway } from './socket.gateway';
 @Module({
   imports: [
     MessageModule,
+    NotificationModule,
     MongooseModule.forFeature([
       { name: 'Conversation', schema: ConversationSchema },
     ]),

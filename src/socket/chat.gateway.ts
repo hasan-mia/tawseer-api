@@ -1,5 +1,7 @@
 import { MessageService } from '@/message/message.service';
+import { NotificationService } from '@/notification/notification.service';
 import { Conversation } from '@/schemas/conversation.schema';
+import { NotificationType } from '@/schemas/notification.schema';
 import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/mongoose';
@@ -40,11 +42,13 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     private userSockets = new Map<string, Set<string>>(); // userId -> Set of socketIds
     private typingUsers = new Map<string, Set<string>>();
     private statusBroadcastQueue = new Map<string, NodeJS.Timeout>();
+    private processingMessages = new Set<string>();
 
     constructor(
         @InjectModel(Conversation.name)
         private conversationModel: Model<Conversation>,
         private messageService: MessageService,
+        private notificationService: NotificationService,
         private jwtService: JwtService
     ) { }
 
@@ -95,6 +99,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
 
             // Join user to their personal room
             socket.join(`user:${userId}`);
+            socket.join(`notifications:${userId}`);
             socket.data.userId = userId.toString();
             socket.data.authenticated = true;
 
@@ -103,10 +108,20 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
             // Broadcast user came online (debounced)
             this.debouncedStatusBroadcast(userId.toString(), true);
 
+            // Send current unread notification count
+            // const unreadCount = await this.notificationService.getUnreadCount(userId.toString());
+
             socket.emit('connection_success', {
                 message: 'Successfully connected',
-                userId: userId.toString()
+                userId: userId.toString(),
+                // unreadNotifications: unreadCount
             });
+
+            // // Send unread count update
+            // socket.emit('unread-count-update', {
+            //     count: unreadCount,
+            //     timestamp: new Date(),
+            // });
 
         } catch (error) {
             console.error('Socket connection error:', error);
@@ -316,13 +331,68 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
                         tempId: data.tempId
                     });
 
-                    // Broadcast to other participants in the room
                     this.server.to(`conversation:${conversationId}`)
                         .except(socket.id)
                         .emit('new-message', {
                             message: messageResult.data,
                             conversationId,
                         });
+
+
+                    // Get conversation participants for notifications
+                    const conversation = await this.conversationModel
+                        .findById(conversationId)
+                        .populate('participants', 'first_name last_name avatar fcmToken');
+
+                    if (conversation) {
+                        // Broadcast to other participants in the room
+                        this.server.to(`conversation:${conversationId}`)
+                            .except(socket.id)
+                            .emit('new-message', {
+                                message: messageResult.data,
+                                conversationId,
+                            });
+
+                        // Handle notifications for other participants
+                        const otherParticipants = conversation.participants.filter(
+                            (participant: any) => participant._id.toString() !== senderId
+                        );
+
+                        for (const participant of otherParticipants) {
+                            const participantId = participant._id.toString();
+
+                            // Check if user is online
+                            const isOnline = this.isUserOnline(participantId);
+
+                            // Prepare notification content
+                            const notificationTitle = messageResult.data.sender.first_name || 'New Message';
+                            const notificationBody = content.length > 100 ?
+                                content.substring(0, 100) + '...' : content;
+
+                            if (!isOnline) {
+                                // Send push notification for offline users
+                                await this.notificationService.sendChatNotification(
+                                    senderId,
+                                    participantId,
+                                    notificationBody
+                                );
+                            } else {
+                                // Send real-time notification for online users
+                                await this.sendRealtimeNotification(participantId, {
+                                    type: 'chat',
+                                    title: notificationTitle,
+                                    body: notificationBody,
+                                    data: {
+                                        conversationId,
+                                        senderId,
+                                        messageId: messageResult.data._id,
+                                    },
+                                    actionUrl: `/chat/${conversationId}`,
+                                    priority: 'high'
+                                });
+                            }
+                        }
+                    }
                 } else {
                     socket.emit('message-failure', {
                         success: false,
@@ -501,8 +571,163 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         }
     }
 
-    // Helper methods
-    private processingMessages = new Set<string>();
+
+    // ============ NOTIFICATION-SPECIFIC SOCKET EVENTS ============
+
+    @SubscribeMessage('join-notifications')
+    async handleJoinNotifications(@ConnectedSocket() socket: Socket) {
+        if (!socket.data.authenticated) {
+            socket.emit('join-notifications', { success: false, error: 'Not authenticated' });
+            return;
+        }
+
+        const userId = socket.data.userId;
+        socket.join(`notifications:${userId}`);
+
+        // Send current unread count
+        const unreadCount = await this.notificationService.getUnreadCount(userId);
+        socket.emit('unread-count-update', {
+            count: unreadCount,
+            timestamp: new Date(),
+        });
+
+        socket.emit('join-notifications', {
+            success: true,
+            message: 'Successfully joined notifications',
+            unreadCount
+        });
+    }
+
+    @SubscribeMessage('mark-notification-read')
+    async handleMarkNotificationRead(
+        @ConnectedSocket() socket: Socket,
+        @MessageBody() data: { notificationId: string }
+    ) {
+        if (!socket.data.authenticated) {
+            socket.emit('mark-notification-read', { success: false, error: 'Not authenticated' });
+            return;
+        }
+
+        const userId = socket.data.userId;
+
+        try {
+            await this.notificationService.markAsRead(data.notificationId, userId);
+
+            // Send updated unread count
+            const unreadCount = await this.notificationService.getUnreadCount(userId);
+            socket.emit('unread-count-update', {
+                count: unreadCount,
+                timestamp: new Date(),
+            });
+
+            socket.emit('mark-notification-read', {
+                success: true,
+                notificationId: data.notificationId,
+                unreadCount
+            });
+        } catch (error) {
+            socket.emit('mark-notification-read', {
+                success: false,
+                error: error.message,
+                notificationId: data.notificationId
+            });
+        }
+    }
+
+    @SubscribeMessage('mark-all-notifications-read')
+    async handleMarkAllNotificationsRead(@ConnectedSocket() socket: Socket) {
+        if (!socket.data.authenticated) {
+            socket.emit('mark-all-notifications-read', { success: false, error: 'Not authenticated' });
+            return;
+        }
+
+        const userId = socket.data.userId;
+
+        try {
+            const result = await this.notificationService.markAllAsRead(userId);
+
+            socket.emit('unread-count-update', {
+                count: 0,
+                timestamp: new Date(),
+            });
+
+            socket.emit('mark-all-notifications-read', {
+                success: true,
+                markedCount: result.count
+            });
+        } catch (error) {
+            socket.emit('mark-all-notifications-read', {
+                success: false,
+                error: error.message
+            });
+        }
+    }
+
+    @SubscribeMessage('get-notifications')
+    async handleGetNotifications(
+        @ConnectedSocket() socket: Socket,
+        @MessageBody() data: { page?: number; limit?: number; type?: string }
+    ) {
+        if (!socket.data.authenticated) {
+            socket.emit('get-notifications', { success: false, error: 'Not authenticated' });
+            return;
+        }
+
+        const userId = socket.data.userId;
+
+        try {
+            const notifications = await this.notificationService.getNotifications({
+                recipient: userId,
+                page: data.page || 1,
+                limit: data.limit || 20,
+                type: data.type as any,
+            });
+
+            socket.emit('get-notifications', notifications);
+        } catch (error) {
+            socket.emit('get-notifications', {
+                success: false,
+                error: error.message
+            });
+        }
+    }
+
+    @SubscribeMessage('delete-notification')
+    async handleDeleteNotification(
+        @ConnectedSocket() socket: Socket,
+        @MessageBody() data: { notificationId: string }
+    ) {
+        if (!socket.data.authenticated) {
+            socket.emit('delete-notification', { success: false, error: 'Not authenticated' });
+            return;
+        }
+
+        const userId = socket.data.userId;
+
+        try {
+            await this.notificationService.deleteNotification(data.notificationId, userId);
+
+            // Send updated unread count
+            const unreadCount = await this.notificationService.getUnreadCount(userId);
+            socket.emit('unread-count-update', {
+                count: unreadCount,
+                timestamp: new Date(),
+            });
+
+            socket.emit('delete-notification', {
+                success: true,
+                notificationId: data.notificationId,
+                unreadCount
+            });
+        } catch (error) {
+            socket.emit('delete-notification', {
+                success: false,
+                error: error.message,
+                notificationId: data.notificationId
+            });
+        }
+    }
+
 
     private updateUserLastSeen(socketId: string) {
         const user = this.connectedUsers.get(socketId);
@@ -671,4 +896,229 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
             }
         }
     }
+
+
+    // ============ NOTIFICATION HELPER METHODS ============
+
+    // Send real-time notification to online users
+    public async sendRealtimeNotification(userId: string, notificationData: any): Promise<boolean> {
+        const userSocketSet = this.userSockets.get(userId);
+        if (userSocketSet && userSocketSet.size > 0) {
+            // Create notification in database first
+            const notification = await this.notificationService.sendNotification({
+                recipient: userId,
+                title: notificationData.title,
+                body: notificationData.body,
+                type: notificationData.type,
+                priority: notificationData.priority,
+                data: notificationData.data,
+                actionUrl: notificationData.actionUrl,
+                sendPush: false, // Don't send push for online users
+            });
+
+            if (notification.success) {
+                // Send to all user's connected sockets
+                this.server.to(`user:${userId}`).emit('new-notification', {
+                    notification: notification.data,
+                    timestamp: new Date(),
+                });
+
+                // Also send unread count update
+                const unreadCount = await this.notificationService.getUnreadCount(userId);
+                this.server.to(`user:${userId}`).emit('unread-count-update', {
+                    count: unreadCount,
+                    timestamp: new Date(),
+                });
+
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Send notification to user (will determine if push or real-time)
+    public async sendNotificationToUser(
+        userId: string,
+        title: string,
+        body: string,
+        type: NotificationType,
+        data?: any,
+        options?: any
+    ): Promise<boolean> {
+        try {
+            const isOnline = this.isUserOnline(userId);
+
+            if (isOnline) {
+                // Send real-time notification
+                return await this.sendRealtimeNotification(userId, {
+                    title,
+                    body,
+                    type,
+                    data,
+                    priority: options?.priority || 'normal',
+                    actionUrl: options?.actionUrl,
+                });
+            } else {
+                // Send push notification
+                const notification = await this.notificationService.sendNotification({
+                    recipient: userId,
+                    title,
+                    body,
+                    type,
+                    priority: options?.priority,
+                    data,
+                    actionUrl: options?.actionUrl,
+                    sendPush: true,
+                });
+
+                return notification.success;
+            }
+        } catch (error) {
+            console.error('Error sending notification to user:', error);
+            return false;
+        }
+    }
+
+    // Broadcast notification to multiple users
+    public async broadcastNotification(
+        userIds: string[],
+        title: string,
+        body: string,
+        type: NotificationType,
+        data?: any,
+        options?: any
+    ): Promise<void> {
+        const onlineUsers: string[] = [];
+        const offlineUsers: string[] = [];
+
+        // Separate online and offline users
+        userIds.forEach(userId => {
+            if (this.isUserOnline(userId)) {
+                onlineUsers.push(userId);
+            } else {
+                offlineUsers.push(userId);
+            }
+        });
+
+        // Send real-time notifications to online users
+        for (const userId of onlineUsers) {
+            await this.sendRealtimeNotification(userId, {
+                title,
+                body,
+                type,
+                data,
+                priority: options?.priority || 'normal',
+                actionUrl: options?.actionUrl,
+            });
+        }
+
+        // Send push notifications to offline users
+        if (offlineUsers.length > 0) {
+            await this.notificationService.sendBulkNotifications(offlineUsers, {
+                title,
+                body,
+                type,
+                priority: options?.priority,
+                data,
+                actionUrl: options?.actionUrl,
+                sendPush: true,
+            });
+        }
+    }
+
+    // ============ PREDEFINED NOTIFICATION METHODS ============
+
+    public async sendBookingNotification(userId: string, bookingId: string, status: string, details?: any): Promise<boolean> {
+        const statusMessages = {
+            confirmed: 'Your booking has been confirmed!',
+            cancelled: 'Your booking has been cancelled.',
+            completed: 'Your booking has been completed.',
+            pending: 'Your booking is pending confirmation.',
+        };
+
+        return await this.sendNotificationToUser(
+            userId,
+            'Booking Update',
+            statusMessages[status] || `Booking status: ${status}`,
+            NotificationType.BOOKING,
+            { bookingId, status, ...details },
+            {
+                actionUrl: `/bookings/${bookingId}`,
+                priority: 'high'
+            }
+        );
+    }
+
+    public async sendOrderNotification(userId: string, orderId: string, status: string, details?: any): Promise<boolean> {
+        const statusMessages = {
+            placed: 'Your order has been placed successfully!',
+            confirmed: 'Your order has been confirmed.',
+            processing: 'Your order is being processed.',
+            shipped: 'Your order has been shipped.',
+            delivered: 'Your order has been delivered.',
+            cancelled: 'Your order has been cancelled.',
+        };
+
+        return await this.sendNotificationToUser(
+            userId,
+            'Order Update',
+            statusMessages[status] || `Order status: ${status}`,
+            NotificationType.ORDER,
+            { orderId, status, ...details },
+            {
+                actionUrl: `/orders/${orderId}`,
+                priority: 'high'
+            }
+        );
+    }
+
+    public async sendFriendRequestNotification(fromUserId: string, toUserId: string, fromUserName: string): Promise<boolean> {
+        return await this.sendNotificationToUser(
+            toUserId,
+            'New Friend Request',
+            `${fromUserName} sent you a friend request`,
+            NotificationType.FRIEND_REQUEST,
+            { fromUserId, fromUserName },
+            {
+                actionUrl: `/friends/requests`,
+                priority: 'normal'
+            }
+        );
+    }
+
+    public async sendFollowNotification(fromUserId: string, toUserId: string, fromUserName: string): Promise<boolean> {
+        return await this.sendNotificationToUser(
+            toUserId,
+            'New Follower',
+            `${fromUserName} started following you`,
+            NotificationType.FOLLOW,
+            { fromUserId, fromUserName },
+            {
+                actionUrl: `/profile/${fromUserId}`,
+                priority: 'normal'
+            }
+        );
+    }
+
+    public async sendPaymentNotification(userId: string, paymentId: string, amount: number, status: string): Promise<boolean> {
+        const statusMessages = {
+            successful: `Payment of $${amount} was successful`,
+            failed: `Payment of $${amount} failed`,
+            pending: `Payment of $${amount} is pending`,
+            refunded: `Refund of $${amount} has been processed`,
+        };
+
+        return await this.sendNotificationToUser(
+            userId,
+            'Payment Update',
+            statusMessages[status] || `Payment status: ${status}`,
+            NotificationType.PAYMENT,
+            { paymentId, amount, status },
+            {
+                actionUrl: `/payments/${paymentId}`,
+                priority: 'high'
+            }
+        );
+    }
+
 }
