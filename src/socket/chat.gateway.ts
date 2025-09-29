@@ -109,19 +109,21 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
             this.debouncedStatusBroadcast(userId.toString(), true);
 
             // Send current unread notification count
-            // const unreadCount = await this.notificationService.getUnreadCount(userId.toString());
+            const unreadNotificationCount = await this.notificationService.getUnreadCount(userId.toString());
+            const unreadMsg = await this.messageService.getUnreadMessageCount(userId);
+
 
             socket.emit('connection_success', {
                 message: 'Successfully connected',
                 userId: userId.toString(),
-                // unreadNotifications: unreadCount
             });
 
-            // // Send unread count update
-            // socket.emit('unread-count-update', {
-            //     count: unreadCount,
-            //     timestamp: new Date(),
-            // });
+            // Send unread count update
+            socket.emit('unread-count-update', {
+                count: unreadNotificationCount,
+                unreadMsgCount: unreadMsg.data,
+                timestamp: new Date(),
+            });
 
         } catch (error) {
             console.error('Socket connection error:', error);
@@ -361,6 +363,17 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
                         for (const participant of otherParticipants) {
                             const participantId = participant._id.toString();
 
+                            // Get unread count
+                            const unreadNotificationCount = await this.notificationService.getUnreadCount(participantId);
+                            const unreadData = await this.messageService.getUnreadMessageCount(participantId);
+
+                            // Emit to user
+                            this.server.to(`user:${participantId}`).emit('unread-count-update', {
+                                count: unreadNotificationCount,
+                                unreadMsgCount: unreadData.data,
+                                timestamp: new Date(),
+                            });
+
                             // Check if user is online
                             const isOnline = this.isUserOnline(participantId);
 
@@ -421,7 +434,20 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         }
     }
 
+    @SubscribeMessage('get-unread-count')
+    async handleGetUnreadCount(@ConnectedSocket() socket: Socket) {
+        if (!socket.data.authenticated) return;
 
+        const userId = socket.data.userId;
+        const unreadNotificationCount = await this.notificationService.getUnreadCount(userId.toString());
+        const unreadMsg = await this.messageService.getUnreadMessageCount(userId);
+
+        socket.emit('unread-count-update', {
+            count: unreadNotificationCount,
+            unreadMsgCount: unreadMsg.data,
+            timestamp: new Date(),
+        });
+    }
 
     @SubscribeMessage('mark-read')
     async handleMarkRead(
@@ -586,8 +612,11 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
 
         // Send current unread count
         const unreadCount = await this.notificationService.getUnreadCount(userId);
+        const unreadMsg = await this.messageService.getUnreadMessageCount(userId);
+
         socket.emit('unread-count-update', {
             count: unreadCount,
+            unreadMsgCount: unreadMsg.data,
             timestamp: new Date(),
         });
 
@@ -615,10 +644,14 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
 
             // Send updated unread count
             const unreadCount = await this.notificationService.getUnreadCount(userId);
+            const unreadMsg = await this.messageService.getUnreadMessageCount(userId);
+
             socket.emit('unread-count-update', {
                 count: unreadCount,
+                unreadMsgCount: unreadMsg.data,
                 timestamp: new Date(),
             });
+
 
             socket.emit('mark-notification-read', {
                 success: true,
@@ -709,8 +742,11 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
 
             // Send updated unread count
             const unreadCount = await this.notificationService.getUnreadCount(userId);
+            const unreadMsg = await this.messageService.getUnreadMessageCount(userId);
+
             socket.emit('unread-count-update', {
                 count: unreadCount,
+                unreadMsgCount: unreadMsg.data,
                 timestamp: new Date(),
             });
 
@@ -842,12 +878,11 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
 
         if (userConnection) {
             this.server.to(`user:${userId}`).emit('unread-count-update', {
-                unreadCount,
+                count: unreadCount,
                 timestamp: new Date()
             });
         }
     }
-
 
     // Get connected users count
     public isUserOnline(userId: string): boolean {
@@ -925,8 +960,11 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
 
                 // Also send unread count update
                 const unreadCount = await this.notificationService.getUnreadCount(userId);
+                const unreadMsg = await this.messageService.getUnreadMessageCount(userId);
+
                 this.server.to(`user:${userId}`).emit('unread-count-update', {
                     count: unreadCount,
+                    unreadMsgCount: unreadMsg.data,
                     timestamp: new Date(),
                 });
 
