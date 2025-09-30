@@ -1,6 +1,8 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { v4 as uuidv4 } from 'uuid';
+import { User } from './user.schema';
+import { Vendor } from './vendor.schema';
 
 @Schema({
   timestamps: true,
@@ -10,10 +12,10 @@ export class Appointment extends Document {
   uuid: string;
 
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
-  user: Types.ObjectId;
+  user: Types.ObjectId | User;
 
   @Prop({ type: Types.ObjectId, ref: 'Vendor', required: true })
-  vendor: Types.ObjectId;
+  vendor: Types.ObjectId | Vendor;
 
   @Prop({ type: Types.ObjectId, ref: 'Service', required: true })
   service: Types.ObjectId;
