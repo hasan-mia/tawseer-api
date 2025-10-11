@@ -378,7 +378,8 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
                             const isOnline = this.isUserOnline(participantId);
 
                             // Prepare notification content
-                            const message = content.length > 100 ?
+                            const notificationTitle = messageResult.data.sender.first_name || 'New Message';
+                            const notificationBody = content.length > 100 ?
                                 content.substring(0, 100) + '...' : content;
 
                             if (!isOnline) {
@@ -387,14 +388,14 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
                                     senderId,
                                     participantId,
                                     conversationId,
-                                    message,
+                                    notificationBody
                                 );
                             } else {
                                 // Send real-time notification for online users
                                 await this.sendRealtimeNotification(participantId, {
                                     type: 'chat',
-                                    title: "New msg",
-                                    body: "test realtime msg",
+                                    title: notificationTitle,
+                                    body: notificationBody,
                                     data: {
                                         conversationId,
                                         senderId,
