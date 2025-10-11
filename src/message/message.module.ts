@@ -20,12 +20,18 @@ import { QueueService } from './queue.service';
   imports: [
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
+      global: true,
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
+        const expiresIn = config.get<string | number>('JWT_SECRET_EXPIRES');
+
         return {
           secret: config.get<string>('JWT_SECRET'),
           signOptions: {
-            expiresIn: config.get<string | number>('JWT_SECRET_EXPIRES'),
+            // Convert string to number if it's numeric
+            expiresIn: typeof expiresIn === 'string' && !isNaN(+expiresIn)
+              ? Number(expiresIn)
+              : (expiresIn as any),
           },
         };
       },
