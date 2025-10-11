@@ -2,10 +2,10 @@
 import { CloudinaryService } from '@/cloudinary/cloudinary.service';
 import { getPublicIdFromUrl } from '@/helpers/myHelper.helper';
 import { Friend } from '@/schemas/friend.schema';
+import { Post } from '@/schemas/post.schema';
 import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Post } from 'src/schemas/post.schema';
 import { RedisCacheService } from '../rediscloud.service';
 import { User } from '../schemas/user.schema';
 import { PostDto } from './dto/post.dto';

@@ -11,7 +11,7 @@ import {
   UseGuards
 } from '@nestjs/common';
 
-import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
+import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { FriendDto } from './dto/friend.dto';
 import { FriendService } from './friend.service';
 

@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Category } from 'src/schemas/category.schema';
+import { Category } from '@/schemas/category.schema';
 import { CategoryDto } from './dto/category.dto';
 
 @Injectable()

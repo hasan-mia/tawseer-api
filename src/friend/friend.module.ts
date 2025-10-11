@@ -1,9 +1,9 @@
 /* eslint-disable prettier/prettier */
+import { CloudinaryService } from '@/cloudinary/cloudinary.service';
 import { RedisCacheService } from '@/rediscloud.service';
+import { FriendSchema } from '@/schemas/friend.schema';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { CloudinaryService } from 'src/cloudinary/cloudinary.service';
-import { FriendSchema } from 'src/schemas/friend.schema';
 import { UserSchema } from '../schemas/user.schema';
 import { FriendController } from './friend.controller';
 import { FriendService } from './friend.service';

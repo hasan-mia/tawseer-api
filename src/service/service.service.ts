@@ -1,4 +1,6 @@
 
+import { Service } from '@/schemas/service.schema';
+import { User } from '@/schemas/user.schema';
 import { Vendor } from '@/schemas/vendor.schema';
 import {
   BadRequestException,
@@ -8,9 +10,7 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Service } from 'src/schemas/service.schema';
 import { RedisCacheService } from '../rediscloud.service';
-import { User } from '../schemas/user.schema';
 import { ServiceDto, UpdateServiceDto } from './dto/service.dto';
 
 @Injectable()

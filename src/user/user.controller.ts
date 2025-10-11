@@ -10,9 +10,9 @@ import {
   UseGuards
 } from '@nestjs/common';
 
+import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
+import { RolesGuard } from '@/auth/role.guard';
 import { Roles } from '@/auth/roles.decorator';
-import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
-import { RolesGuard } from 'src/auth/role.guard';
 import { UserDto } from './dto/user.dto';
 import { UserService } from './user.service';
 

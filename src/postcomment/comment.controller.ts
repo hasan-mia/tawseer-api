@@ -12,7 +12,7 @@ import {
   UseGuards
 } from '@nestjs/common';
 
-import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
+import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { CommentService } from './comment.service';
 import { CommentDto } from './dto/comment.dto';
 

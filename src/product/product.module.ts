@@ -1,12 +1,12 @@
 /* eslint-disable prettier/prettier */
+import { CloudinaryService } from '@/cloudinary/cloudinary.service';
 import { RedisCacheService } from '@/rediscloud.service';
 import { ProductSchema } from '@/schemas/product.schema';
 import { ReviewSchema } from '@/schemas/review.schema';
 import { VariantSchema } from '@/schemas/variant.schema';
+import { VendorSchema } from '@/schemas/vendor.schema';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { CloudinaryService } from 'src/cloudinary/cloudinary.service';
-import { VendorSchema } from 'src/schemas/vendor.schema';
 import { UserSchema } from '../schemas/user.schema';
 import { ProductController } from './product.controller';
 import { ProductService } from './product.service';

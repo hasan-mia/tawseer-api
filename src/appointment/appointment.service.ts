@@ -1,7 +1,10 @@
 /* eslint-disable prettier/prettier */
+import { ApiFeatures } from '@/helpers/apiFeatures.helper';
 import { StripeService } from '@/payment/stripe.service';
 import { TransactionService } from '@/payment/transaction.service';
+import { RedisCacheService } from '@/rediscloud.service';
 import { Appointment } from '@/schemas/appointment.schema';
+import { Service } from '@/schemas/service.schema';
 import {
   Injectable,
   InternalServerErrorException,
@@ -9,9 +12,6 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { ApiFeatures } from 'src/helpers/apiFeatures.helper';
-import { Service } from 'src/schemas/service.schema';
-import { RedisCacheService } from '../rediscloud.service';
 import { User } from '../schemas/user.schema';
 import { AppointmentDto } from './dto/appointment.dto';
 

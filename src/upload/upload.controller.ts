@@ -13,10 +13,10 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 
+import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
+import { CloudinaryService } from '@/cloudinary/cloudinary.service';
+import { restructureVideo } from '@/helpers/restructureVideo.helper';
 import { FileFieldsInterceptor, FileInterceptor } from '@nestjs/platform-express';
-import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
-import { CloudinaryService } from 'src/cloudinary/cloudinary.service';
-import { restructureVideo } from 'src/helpers/restructureVideo.helper';
 import { UploadService } from './upload.service';
 
 @Controller('upload')

@@ -10,7 +10,7 @@ import {
   UseGuards
 } from '@nestjs/common';
 
-import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
+import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { AppointmentService } from './appointment.service';
 import { AppointmentDto } from './dto/appointment.dto';
 

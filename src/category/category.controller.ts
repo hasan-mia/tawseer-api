@@ -15,7 +15,7 @@ import {
 
 import { RolesGuard } from '@/auth/role.guard';
 import { Roles } from '@/auth/roles.decorator';
-import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
+import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { CategoryService } from './category.service';
 import { CategoryDto } from './dto/category.dto';
 

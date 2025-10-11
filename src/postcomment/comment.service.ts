@@ -1,5 +1,7 @@
 /* eslint-disable prettier/prettier */
 import { RedisCacheService } from '@/rediscloud.service';
+import { Comment } from '@/schemas/comment.schema';
+import { Post } from '@/schemas/post.schema';
 import {
   BadRequestException,
   Injectable,
@@ -8,8 +10,6 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Comment } from 'src/schemas/comment.schema';
-import { Post } from 'src/schemas/post.schema';
 import { User } from '../schemas/user.schema';
 import { CommentDto } from './dto/comment.dto';
 

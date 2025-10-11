@@ -1,5 +1,6 @@
 import { generateRandomFourDigitOtp } from '@/helpers/otp.helper';
 import { RedisCacheService } from '@/rediscloud.service';
+import { User } from '@/schemas/user.schema';
 import { Vendor } from '@/schemas/vendor.schema';
 import {
   BadRequestException,
@@ -13,7 +14,6 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/mongoose';
 import * as bcrypt from 'bcryptjs';
 import { Model } from 'mongoose';
-import { User } from 'src/schemas/user.schema';
 import { OtpDto } from './dto/otp.dto';
 import { SignInDto } from './dto/signin.dto';
 import { SignUpDto, UserRole } from './dto/signup.dto';

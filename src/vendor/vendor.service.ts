@@ -3,8 +3,8 @@ import { VendorFollow } from '@/schemas/vendorFollow.schema';
 import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Vendor } from 'src/schemas/vendor.schema';
-import { User } from '../schemas/user.schema';
+import { Vendor } from '@/schemas/vendor.schema';
+import { User } from '@/schemas/user.schema';
 import { DayOfWeek, updateVendor } from './dto/updateVendor.dto';
 import { VendorDto } from './dto/vendor.dto';
 

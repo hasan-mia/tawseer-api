@@ -1,6 +1,8 @@
 /* eslint-disable prettier/prettier */
 import { CloudinaryService } from '@/cloudinary/cloudinary.service';
 import { getPublicIdFromUrl } from '@/helpers/myHelper.helper';
+import { Photo } from '@/schemas/photo.schema';
+import { Video } from '@/schemas/video.schema';
 import {
   BadRequestException,
   Injectable,
@@ -9,8 +11,6 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { isValidObjectId, Model } from 'mongoose';
-import { Photo } from 'src/schemas/photo.schema';
-import { Video } from 'src/schemas/video.schema';
 import { RedisCacheService } from '../rediscloud.service';
 import { User } from '../schemas/user.schema';
 
