@@ -399,7 +399,7 @@ export class NotificationService {
   async sendChatNotification(senderId: string, recipientId: string, conversationId: string, message: string): Promise<any> {
     const sender = await this.userModel.findById(senderId).select('first_name last_name avatar');
 
-    return this.sendNotification({
+    return this.sendDirectPushNotification({
       recipient: recipientId,
       sender: senderId,
       title: `${sender.first_name} ${sender.last_name}`,
