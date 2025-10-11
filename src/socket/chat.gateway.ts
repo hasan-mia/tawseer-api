@@ -389,6 +389,20 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
                                     conversationId,
                                     message,
                                 );
+                            } else {
+                                // Send real-time notification for online users
+                                await this.sendRealtimeNotification(participantId, {
+                                    type: 'chat',
+                                    title: "New msg",
+                                    body: "test realtime msg",
+                                    data: {
+                                        conversationId,
+                                        senderId,
+                                        messageId: messageResult.data._id,
+                                    },
+                                    actionUrl: `/message/${conversationId}`,
+                                    priority: 'high'
+                                });
                             }
 
                         }
