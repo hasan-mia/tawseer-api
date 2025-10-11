@@ -378,8 +378,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
                             const isOnline = this.isUserOnline(participantId);
 
                             // Prepare notification content
-                            const notificationTitle = messageResult.data.sender.first_name || 'New Message';
-                            const notificationBody = content.length > 100 ?
+                            const message = content.length > 100 ?
                                 content.substring(0, 100) + '...' : content;
 
                             if (!isOnline) {
@@ -387,23 +386,11 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
                                 await this.notificationService.sendChatNotification(
                                     senderId,
                                     participantId,
-                                    notificationBody
+                                    conversationId,
+                                    message,
                                 );
-                            } else {
-                                // Send real-time notification for online users
-                                await this.sendRealtimeNotification(participantId, {
-                                    type: 'chat',
-                                    title: notificationTitle,
-                                    body: notificationBody,
-                                    data: {
-                                        conversationId,
-                                        senderId,
-                                        messageId: messageResult.data._id,
-                                    },
-                                    actionUrl: `/chat/${conversationId}`,
-                                    priority: 'high'
-                                });
                             }
+
                         }
                     }
                 } else {
@@ -627,75 +614,6 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         });
     }
 
-    @SubscribeMessage('mark-notification-read')
-    async handleMarkNotificationRead(
-        @ConnectedSocket() socket: Socket,
-        @MessageBody() data: { notificationId: string }
-    ) {
-        if (!socket.data.authenticated) {
-            socket.emit('mark-notification-read', { success: false, error: 'Not authenticated' });
-            return;
-        }
-
-        const userId = socket.data.userId;
-
-        try {
-            await this.notificationService.markAsRead(data.notificationId, userId);
-
-            // Send updated unread count
-            const unreadCount = await this.notificationService.getUnreadCount(userId);
-            const unreadMsg = await this.messageService.getUnreadMessageCount(userId);
-
-            socket.emit('unread-count-update', {
-                count: unreadCount,
-                unreadMsgCount: unreadMsg.data,
-                timestamp: new Date(),
-            });
-
-
-            socket.emit('mark-notification-read', {
-                success: true,
-                notificationId: data.notificationId,
-                unreadCount
-            });
-        } catch (error) {
-            socket.emit('mark-notification-read', {
-                success: false,
-                error: error.message,
-                notificationId: data.notificationId
-            });
-        }
-    }
-
-    @SubscribeMessage('mark-all-notifications-read')
-    async handleMarkAllNotificationsRead(@ConnectedSocket() socket: Socket) {
-        if (!socket.data.authenticated) {
-            socket.emit('mark-all-notifications-read', { success: false, error: 'Not authenticated' });
-            return;
-        }
-
-        const userId = socket.data.userId;
-
-        try {
-            const result = await this.notificationService.markAllAsRead(userId);
-
-            socket.emit('unread-count-update', {
-                count: 0,
-                timestamp: new Date(),
-            });
-
-            socket.emit('mark-all-notifications-read', {
-                success: true,
-                markedCount: result.count
-            });
-        } catch (error) {
-            socket.emit('mark-all-notifications-read', {
-                success: false,
-                error: error.message
-            });
-        }
-    }
-
     @SubscribeMessage('get-notifications')
     async handleGetNotifications(
         @ConnectedSocket() socket: Socket,
@@ -724,46 +642,6 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
             });
         }
     }
-
-    @SubscribeMessage('delete-notification')
-    async handleDeleteNotification(
-        @ConnectedSocket() socket: Socket,
-        @MessageBody() data: { notificationId: string }
-    ) {
-        if (!socket.data.authenticated) {
-            socket.emit('delete-notification', { success: false, error: 'Not authenticated' });
-            return;
-        }
-
-        const userId = socket.data.userId;
-
-        try {
-            await this.notificationService.deleteNotification(data.notificationId, userId);
-
-            // Send updated unread count
-            const unreadCount = await this.notificationService.getUnreadCount(userId);
-            const unreadMsg = await this.messageService.getUnreadMessageCount(userId);
-
-            socket.emit('unread-count-update', {
-                count: unreadCount,
-                unreadMsgCount: unreadMsg.data,
-                timestamp: new Date(),
-            });
-
-            socket.emit('delete-notification', {
-                success: true,
-                notificationId: data.notificationId,
-                unreadCount
-            });
-        } catch (error) {
-            socket.emit('delete-notification', {
-                success: false,
-                error: error.message,
-                notificationId: data.notificationId
-            });
-        }
-    }
-
 
     private updateUserLastSeen(socketId: string) {
         const user = this.connectedUsers.get(socketId);

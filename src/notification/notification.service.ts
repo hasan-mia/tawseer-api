@@ -125,6 +125,67 @@ export class NotificationService {
     }
   }
 
+  // Send Directly push notification via FCM without saving
+  async sendDirectPushNotification(notification: any): Promise<boolean> {
+    try {
+
+      const recipient = await this.userModel.findById(notification.recipient).select('fcmToken first_name last_name avatar');
+
+      if (!recipient) {
+        throw new NotFoundException('Participant not found');
+      }
+
+      if (!recipient.fcmToken) {
+        this.logger.warn(`No FCM token for user ${recipient._id}`);
+        return false;
+      }
+
+
+      const message: admin.messaging.Message = {
+        token: recipient.fcmToken,
+        notification: {
+          title: notification.title,
+          body: notification.body,
+          imageUrl: notification.image,
+        },
+        data: {
+          type: notification.type,
+          actionUrl: notification.actionUrl || '',
+          externalId: notification.externalId || '',
+          ...notification.data,
+        },
+        android: {
+          notification: {
+            icon: notification.icon || 'ic_notification',
+            sound: notification.sound || 'default',
+            channelId: this.getChannelId(notification.type),
+            priority: this.getAndroidPriority(notification.priority),
+          },
+          data: {
+            click_action: 'FLUTTER_NOTIFICATION_CLICK',
+          },
+        },
+        apns: {
+          payload: {
+            aps: {
+              sound: notification.sound || 'default',
+              badge: await this.getUnreadCount(notification.recipient),
+              category: notification.type,
+            },
+          },
+        },
+      };
+
+      await admin.messaging().send(message);
+
+      this.logger.log(`Message notification sent to user ${recipient._id}`);
+      return true;
+    } catch (error) {
+      this.logger.error('Error sending push notification:', error);
+      return false;
+    }
+  }
+
   // Get notifications with filters and pagination
   async getNotifications(filter: NotificationFilter): Promise<any> {
     try {
@@ -335,10 +396,10 @@ export class NotificationService {
   }
 
   // Predefined notification templates
-  async sendChatNotification(senderId: string, recipientId: string, message: string): Promise<any> {
+  async sendChatNotification(senderId: string, recipientId: string, conversationId: string, message: string): Promise<any> {
     const sender = await this.userModel.findById(senderId).select('first_name last_name avatar');
 
-    return this.sendNotification({
+    return this.sendDirectPushNotification({
       recipient: recipientId,
       sender: senderId,
       title: `${sender.first_name} ${sender.last_name}`,
@@ -346,11 +407,11 @@ export class NotificationService {
       type: NotificationType.CHAT,
       priority: NotificationPriority.HIGH,
       data: {
-        conversationId: senderId, // or actual conversation ID
+        conversationId,
         senderId,
         messagePreview: message.substring(0, 100),
       },
-      actionUrl: `/chat/${senderId}`,
+      actionUrl: `/message/${conversationId}`,
       externalId: senderId,
       tags: ['chat', 'message'],
     });
