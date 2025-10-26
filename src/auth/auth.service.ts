@@ -85,6 +85,8 @@ export class AuthService {
     try {
       const user = await this.userModel.findOne({ email });
 
+      console.log("fcmToken : ", fcmToken)
+
       if (!user) {
         throw new NotFoundException('User not found.');
       }
