@@ -64,26 +64,26 @@ export class NotificationService {
     try {
       const notification = await this.notificationModel
         .findById(notificationId)
-        .populate('recipient', 'expoPushToken first_name');
+        .populate('recipient', 'fcmToken first_name');
 
       if (!notification) {
         throw new NotFoundException('Notification not found');
       }
 
       const recipient = notification.recipient as any;
-      if (!recipient.expoPushToken) {
+      if (!recipient.fcmToken) {
         this.logger.warn(`No Expo push token for user ${recipient._id}`);
         return false;
       }
 
       // Validate the Expo push token
-      if (!Expo.isExpoPushToken(recipient.expoPushToken)) {
-        this.logger.error(`Invalid Expo push token for user ${recipient._id}: ${recipient.expoPushToken}`);
+      if (!Expo.isExpoPushToken(recipient.fcmToken)) {
+        this.logger.error(`Invalid Expo push token for user ${recipient._id}: ${recipient.fcmToken}`);
         return false;
       }
 
       const message: ExpoPushMessage = {
-        to: recipient.expoPushToken,
+        to: recipient.fcmToken,
         sound: notification.sound || 'default',
         title: notification.title,
         body: notification.body,
@@ -119,7 +119,7 @@ export class NotificationService {
         if (ticket.details?.error === 'DeviceNotRegistered') {
           this.logger.warn(`Removing invalid Expo token for user ${recipient._id}`);
           await this.userModel.findByIdAndUpdate(recipient._id, {
-            $unset: { expoPushToken: 1 }
+            $unset: { fcmToken: 1 }
           });
         }
       }
@@ -199,7 +199,7 @@ export class NotificationService {
         if (ticket.details?.error === 'DeviceNotRegistered') {
           this.logger.warn(`Removing invalid Expo token for user ${recipient._id}`);
           await this.userModel.findByIdAndUpdate(recipient._id, {
-            $unset: { expoPushToken: 1 }
+            $unset: { fcmToken: 1 }
           });
         }
       }
@@ -403,7 +403,7 @@ export class NotificationService {
       // Fetch all notifications with recipients
       const notifications = await this.notificationModel
         .find({ _id: { $in: notificationIds } })
-        .populate('recipient', 'expoPushToken _id')
+        .populate('recipient', 'fcmToken _id')
         .lean();
 
       // Prepare messages
@@ -413,18 +413,18 @@ export class NotificationService {
       for (const notification of notifications) {
         const recipient = notification.recipient as any;
 
-        if (!recipient?.expoPushToken) {
+        if (!recipient?.fcmToken) {
           this.logger.warn(`No Expo push token for user ${recipient?._id}`);
           continue;
         }
 
-        if (!Expo.isExpoPushToken(recipient.expoPushToken)) {
+        if (!Expo.isExpoPushToken(recipient.fcmToken)) {
           this.logger.error(`Invalid Expo push token for user ${recipient._id}`);
           continue;
         }
 
         messages.push({
-          to: recipient.expoPushToken,
+          to: recipient.fcmToken,
           sound: notification.sound || 'default',
           title: notification.title,
           body: notification.body,
