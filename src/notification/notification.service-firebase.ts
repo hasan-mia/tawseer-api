@@ -1,25 +1,21 @@
+import admin from '@/firebase-admin.config';
 import { Notification, NotificationPriority, NotificationType } from '@/schemas/notification.schema';
 import { User } from '@/schemas/user.schema';
 import { Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Expo, ExpoPushMessage, ExpoPushTicket } from 'expo-server-sdk';
 import { Model } from 'mongoose';
 import { NotificationFilter, SendNotificationDto } from './dto/notification.dto';
+
 
 @Injectable()
 export class NotificationService {
   private readonly logger = new Logger(NotificationService.name);
-  private expo: Expo;
 
   constructor(
     @InjectModel(Notification.name) private notificationModel: Model<Notification>,
     @InjectModel(User.name) private userModel: Model<User>,
-  ) {
-    this.expo = new Expo({
-      accessToken: process.env.EXPO_ACCESS_TOKEN,
-      useFcmV1: true,
-    });
-  }
+
+  ) { }
 
   // Create and send notification
   async sendNotification(data: SendNotificationDto): Promise<any> {
@@ -59,34 +55,30 @@ export class NotificationService {
     }
   }
 
-  // Send push notification via Expo
+  // Send push notification via FCM
   async sendPushNotification(notificationId: string): Promise<boolean> {
     try {
       const notification = await this.notificationModel
         .findById(notificationId)
-        .populate('recipient', 'expoPushToken first_name');
+        .populate('recipient', 'fcmToken first_name');
 
       if (!notification) {
         throw new NotFoundException('Notification not found');
       }
 
       const recipient = notification.recipient as any;
-      if (!recipient.expoPushToken) {
-        this.logger.warn(`No Expo push token for user ${recipient._id}`);
+      if (!recipient.fcmToken) {
+        this.logger.warn(`No FCM token for user ${recipient._id}`);
         return false;
       }
 
-      // Validate the Expo push token
-      if (!Expo.isExpoPushToken(recipient.expoPushToken)) {
-        this.logger.error(`Invalid Expo push token for user ${recipient._id}: ${recipient.expoPushToken}`);
-        return false;
-      }
-
-      const message: ExpoPushMessage = {
-        to: recipient.expoPushToken,
-        sound: notification.sound || 'default',
-        title: notification.title,
-        body: notification.body,
+      const message: admin.messaging.Message = {
+        token: recipient.fcmToken,
+        notification: {
+          title: notification.title,
+          body: notification.body,
+          imageUrl: notification.image,
+        },
         data: {
           notificationId: notification._id.toString(),
           type: notification.type,
@@ -94,123 +86,102 @@ export class NotificationService {
           externalId: notification.externalId || '',
           ...notification.data,
         },
-        badge: await this.getUnreadCount(recipient._id),
-        priority: this.getExpoPriority(notification.priority),
-        channelId: this.getChannelId(notification.type),
+        android: {
+          notification: {
+            icon: notification.icon || 'ic_notification',
+            sound: notification.sound || 'default',
+            channelId: this.getChannelId(notification.type),
+            priority: this.getAndroidPriority(notification.priority),
+          },
+          data: {
+            click_action: 'FLUTTER_NOTIFICATION_CLICK',
+          },
+        },
+        apns: {
+          payload: {
+            aps: {
+              sound: notification.sound || 'default',
+              badge: await this.getUnreadCount(recipient._id),
+              category: notification.type,
+            },
+          },
+        },
       };
 
-      // Add image if provided
-      if (notification.image) {
-        // Expo supports images via the 'image' field (Android) or through rich notifications
-        (message as any).image = notification.image;
-      }
-
-      // Send the notification
-      const ticketChunk = await this.expo.sendPushNotificationsAsync([message]);
-
-      // Check if notification was sent successfully
-      const ticket = ticketChunk[0];
-      const success = ticket.status === 'ok';
-
-      if (!success && ticket.status === 'error') {
-        this.logger.error(`Error sending push notification: ${ticket.message}`);
-
-        // Handle invalid tokens
-        if (ticket.details?.error === 'DeviceNotRegistered') {
-          this.logger.warn(`Removing invalid Expo token for user ${recipient._id}`);
-          await this.userModel.findByIdAndUpdate(recipient._id, {
-            $unset: { expoPushToken: 1 }
-          });
-        }
-      }
+      await admin.messaging().send(message);
 
       // Update notification as push sent
       await this.notificationModel.findByIdAndUpdate(notificationId, {
-        isPushSent: success,
-        deliveredAt: success ? new Date() : null,
-        isDelivered: success,
+        isPushSent: true,
+        deliveredAt: new Date(),
+        isDelivered: true,
       });
 
-      if (success) {
-        this.logger.log(`Push notification sent to user ${recipient._id}`);
-      }
-
-      return success;
+      this.logger.log(`Push notification sent to user ${recipient._id}`);
+      return true;
     } catch (error) {
       this.logger.error('Error sending push notification:', error);
       return false;
     }
   }
 
-  // Send Directly push notification via Expo without saving
+  // Send Directly push notification via FCM without saving
   async sendDirectPushNotification(notification: any): Promise<boolean> {
     try {
-      const recipient = await this.userModel
-        .findById(notification.recipient)
-        .select('fcmToken first_name last_name avatar');
+
+      const recipient = await this.userModel.findById(notification.recipient).select('fcmToken first_name last_name avatar');
 
       if (!recipient) {
         throw new NotFoundException('Participant not found');
       }
 
       if (!recipient.fcmToken) {
-        this.logger.warn(`No Expo push token for user ${recipient._id}`);
+        this.logger.warn(`No FCM token for user ${recipient._id}`);
         return false;
       }
 
-      // Validate the Expo push token
-      if (!Expo.isExpoPushToken(recipient.fcmToken)) {
-        this.logger.error(`Invalid Expo push token for user ${recipient._id}: ${recipient.fcmToken}`);
-        return false;
-      }
 
-      const message: ExpoPushMessage = {
-        to: recipient.fcmToken,
-        sound: notification.sound || 'default',
-        title: notification.title,
-        body: notification.body,
+      const message: admin.messaging.Message = {
+        token: recipient.fcmToken,
+        notification: {
+          title: notification.title,
+          body: notification.body,
+          imageUrl: notification.image,
+        },
         data: {
           type: notification.type,
           actionUrl: notification.actionUrl || '',
           externalId: notification.externalId || '',
           ...notification.data,
         },
-        badge: await this.getUnreadCount(notification.recipient),
-        priority: this.getExpoPriority(notification.priority),
-        channelId: this.getChannelId(notification.type),
+        android: {
+          notification: {
+            icon: notification.icon || 'ic_notification',
+            sound: notification.sound || 'default',
+            channelId: this.getChannelId(notification.type),
+            priority: this.getAndroidPriority(notification.priority),
+          },
+          data: {
+            click_action: 'FLUTTER_NOTIFICATION_CLICK',
+          },
+        },
+        apns: {
+          payload: {
+            aps: {
+              sound: notification.sound || 'default',
+              badge: await this.getUnreadCount(notification.recipient),
+              category: notification.type,
+            },
+          },
+        },
       };
 
-      // Add image if provided
-      if (notification.image) {
-        (message as any).image = notification.image;
-      }
+      await admin.messaging().send(message);
 
-      // Send the notification
-      const ticketChunk = await this.expo.sendPushNotificationsAsync([message]);
-
-      // Check if notification was sent successfully
-      const ticket = ticketChunk[0];
-      const success = ticket.status === 'ok';
-
-      if (!success && ticket.status === 'error') {
-        this.logger.error(`Error sending direct push notification: ${ticket.message}`);
-
-        // Handle invalid tokens
-        if (ticket.details?.error === 'DeviceNotRegistered') {
-          this.logger.warn(`Removing invalid Expo token for user ${recipient._id}`);
-          await this.userModel.findByIdAndUpdate(recipient._id, {
-            $unset: { expoPushToken: 1 }
-          });
-        }
-      }
-
-      if (success) {
-        this.logger.log(`Direct push notification sent to user ${recipient._id}`);
-      }
-
-      return success;
+      this.logger.log(`Message notification sent to user ${recipient._id}`);
+      return true;
     } catch (error) {
-      this.logger.error('Error sending direct push notification:', error);
+      this.logger.error('Error sending push notification:', error);
       return false;
     }
   }
@@ -381,9 +352,10 @@ export class NotificationService {
 
       // Send push notifications
       if (notificationData.sendPush !== false) {
-        await this.sendBulkPushNotifications(
-          createdNotifications.map(n => n._id.toString())
+        const pushPromises = createdNotifications.map(notification =>
+          this.sendPushNotification(notification._id.toString()),
         );
+        await Promise.allSettled(pushPromises);
       }
 
       return {
@@ -394,91 +366,6 @@ export class NotificationService {
     } catch (error) {
       this.logger.error('Error sending bulk notifications:', error);
       throw new InternalServerErrorException('Failed to send bulk notifications');
-    }
-  }
-
-  // Send bulk push notifications efficiently
-  private async sendBulkPushNotifications(notificationIds: string[]): Promise<void> {
-    try {
-      // Fetch all notifications with recipients
-      const notifications = await this.notificationModel
-        .find({ _id: { $in: notificationIds } })
-        .populate('recipient', 'expoPushToken _id')
-        .lean();
-
-      // Prepare messages
-      const messages: ExpoPushMessage[] = [];
-      const validNotifications: any[] = [];
-
-      for (const notification of notifications) {
-        const recipient = notification.recipient as any;
-
-        if (!recipient?.expoPushToken) {
-          this.logger.warn(`No Expo push token for user ${recipient?._id}`);
-          continue;
-        }
-
-        if (!Expo.isExpoPushToken(recipient.expoPushToken)) {
-          this.logger.error(`Invalid Expo push token for user ${recipient._id}`);
-          continue;
-        }
-
-        messages.push({
-          to: recipient.expoPushToken,
-          sound: notification.sound || 'default',
-          title: notification.title,
-          body: notification.body,
-          data: {
-            notificationId: notification._id.toString(),
-            type: notification.type,
-            actionUrl: notification.actionUrl || '',
-            externalId: notification.externalId || '',
-            ...notification.data,
-          },
-          priority: this.getExpoPriority(notification.priority),
-          channelId: this.getChannelId(notification.type),
-        });
-
-        validNotifications.push(notification);
-      }
-
-      if (messages.length === 0) {
-        this.logger.warn('No valid push tokens found for bulk notifications');
-        return;
-      }
-
-      // Send notifications in chunks (Expo recommends max 100 per request)
-      const chunks = this.expo.chunkPushNotifications(messages);
-      const tickets: ExpoPushTicket[] = [];
-
-      for (const chunk of chunks) {
-        try {
-          const ticketChunk = await this.expo.sendPushNotificationsAsync(chunk);
-          tickets.push(...ticketChunk);
-        } catch (error) {
-          this.logger.error('Error sending push notification chunk:', error);
-        }
-      }
-
-      // Update notification statuses based on tickets
-      for (let i = 0; i < tickets.length; i++) {
-        const ticket = tickets[i];
-        const notification = validNotifications[i];
-
-        if (ticket.status === 'ok') {
-          await this.notificationModel.findByIdAndUpdate(notification._id, {
-            isPushSent: true,
-            deliveredAt: new Date(),
-            isDelivered: true,
-          });
-        } else if (ticket.status === 'error') {
-          this.logger.error(`Error for notification ${notification._id}: ${ticket.message}`);
-        }
-      }
-
-      this.logger.log(`Bulk push notifications sent: ${tickets.filter(t => t.status === 'ok').length}/${tickets.length}`);
-    } catch (error) {
-      this.logger.error('Error in bulk push notifications:', error);
     }
   }
 
@@ -498,26 +385,19 @@ export class NotificationService {
     return channelMap[type] || 'default';
   }
 
-  private getExpoPriority(priority: NotificationPriority): 'default' | 'normal' | 'high' {
+  private getAndroidPriority(priority: NotificationPriority): 'min' | 'low' | 'default' | 'high' | 'max' {
     const priorityMap = {
-      [NotificationPriority.LOW]: 'default' as const,
-      [NotificationPriority.NORMAL]: 'normal' as const,
+      [NotificationPriority.LOW]: 'low' as const,
+      [NotificationPriority.NORMAL]: 'default' as const,
       [NotificationPriority.HIGH]: 'high' as const,
-      [NotificationPriority.URGENT]: 'high' as const,
+      [NotificationPriority.URGENT]: 'max' as const,
     };
-    return priorityMap[priority] || 'normal';
+    return priorityMap[priority] || 'default';
   }
 
   // Predefined notification templates
-  async sendChatNotification(
-    senderId: string,
-    recipientId: string,
-    conversationId: string,
-    message: string,
-  ): Promise<any> {
-    const sender = await this.userModel
-      .findById(senderId)
-      .select('first_name last_name avatar');
+  async sendChatNotification(senderId: string, recipientId: string, conversationId: string, message: string): Promise<any> {
+    const sender = await this.userModel.findById(senderId).select('first_name last_name avatar');
 
     return this.sendDirectPushNotification({
       recipient: recipientId,
@@ -537,12 +417,7 @@ export class NotificationService {
     });
   }
 
-  async sendBookingNotification(
-    userId: string,
-    bookingId: string,
-    status: string,
-    details?: any,
-  ): Promise<any> {
+  async sendBookingNotification(userId: string, bookingId: string, status: string, details?: any): Promise<any> {
     const statusMessages = {
       confirmed: 'Your booking has been confirmed!',
       cancelled: 'Your booking has been cancelled.',
@@ -567,12 +442,7 @@ export class NotificationService {
     });
   }
 
-  async sendOrderNotification(
-    userId: string,
-    orderId: string,
-    status: string,
-    details?: any,
-  ): Promise<any> {
+  async sendOrderNotification(userId: string, orderId: string, status: string, details?: any): Promise<any> {
     const statusMessages = {
       placed: 'Your order has been placed successfully!',
       confirmed: 'Your order has been confirmed.',
