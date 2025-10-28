@@ -119,7 +119,7 @@ export class Transaction extends Document {
 export const TransactionSchema = SchemaFactory.createForClass(Transaction);
 
 // Add indexes for better query performance
-TransactionSchema.index({ trxID: 1 }, { unique: true });
+// TransactionSchema.index({ trxID: 1 }, { unique: true });
 TransactionSchema.index({ referenceId: 1 }, { unique: true });
 TransactionSchema.index({ user: 1 });
 TransactionSchema.index({ vendor: 1 });

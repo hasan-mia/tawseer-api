@@ -31,7 +31,8 @@ interface ConnectedUser {
         origin: '*',
         methods: ['GET', 'POST']
     },
-    transports: ['websocket', 'polling']
+    transports: ['websocket', 'polling'],
+    namespace: '/chat',
 })
 @Injectable()
 export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
