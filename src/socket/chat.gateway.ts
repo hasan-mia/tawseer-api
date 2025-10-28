@@ -2,6 +2,7 @@ import { MessageService } from '@/message/message.service';
 import { NotificationService } from '@/notification/notification.service';
 import { Conversation } from '@/schemas/conversation.schema';
 import { NotificationType } from '@/schemas/notification.schema';
+import { User } from '@/schemas/user.schema';
 import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/mongoose';
@@ -47,6 +48,8 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     constructor(
         @InjectModel(Conversation.name)
         private conversationModel: Model<Conversation>,
+        @InjectModel(User.name)
+        private userModel: Model<User>,
         private messageService: MessageService,
         private notificationService: NotificationService,
         private jwtService: JwtService
@@ -105,6 +108,11 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
 
             console.log(`User ${userId} authenticated with socket ${socket.id}`);
 
+            await this.userModel.findByIdAndUpdate(userId, {
+                isOnline: true,
+                lastSeen: new Date()
+            });
+
             // Broadcast user came online (debounced)
             this.debouncedStatusBroadcast(userId.toString(), true);
 
@@ -150,6 +158,11 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
                 // If no more sockets for this user, they're offline
                 if (userSocketSet.size === 0) {
                     this.userSockets.delete(userId);
+
+                    // SAVE LAST SEEN TO DATABASE
+                    this.updateUserLastSeenInDB(userId).catch(err =>
+                        console.error('Error updating last seen:', err)
+                    );
 
                     // Remove from typing and broadcast offline status
                     this.removeFromAllTyping(userId);
@@ -593,9 +606,26 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
 
     // Heartbeat to update last seen
     @SubscribeMessage('heartbeat')
-    handleHeartbeat(@ConnectedSocket() socket: Socket) {
+    async handleHeartbeat(@ConnectedSocket() socket: Socket) {
         if (socket.data.authenticated) {
+            const userId = socket.data.userId;
+
+            // Update in-memory
             this.updateUserLastSeen(socket.id);
+
+            // Periodically update database (every 10th heartbeat to reduce DB writes)
+            if (!socket.data.heartbeatCount) {
+                socket.data.heartbeatCount = 0;
+            }
+            socket.data.heartbeatCount++;
+
+            if (socket.data.heartbeatCount % 10 === 0) {
+                await this.userModel.findByIdAndUpdate(userId, {
+                    lastSeen: new Date(),
+                    isOnline: true
+                });
+            }
+
             socket.emit('heartbeat-ack', { timestamp: new Date() });
         }
     }
@@ -656,6 +686,18 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
                 success: false,
                 error: error.message
             });
+        }
+    }
+
+    private async updateUserLastSeenInDB(userId: string) {
+        try {
+            await this.userModel.findByIdAndUpdate(userId, {
+                lastSeen: new Date(),
+                isOnline: false
+            });
+            console.log(`✅ Updated last seen for user ${userId}`);
+        } catch (error) {
+            console.error('Error updating last seen in DB:', error);
         }
     }
 
@@ -730,23 +772,43 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     }
 
     private async getLastSeenInfo(userIds: string[]): Promise<Record<string, Date | null>> {
-        // Implement this method to fetch last seen from database
-        // For now, return current connected users' last seen or null
         const lastSeenInfo: Record<string, Date | null> = {};
 
-        userIds.forEach(userId => {
-            // Find any socket for this user
-            const userSocketSet = this.userSockets.get(userId);
-            if (userSocketSet && userSocketSet.size > 0) {
-                // User is online, get their latest last seen
-                const socketId = Array.from(userSocketSet)[0];
-                const connectedUser = this.connectedUsers.get(socketId);
-                lastSeenInfo[userId] = connectedUser?.lastSeen || null;
-            } else {
-                // User is offline, you'd fetch from database here
-                lastSeenInfo[userId] = null; // Or fetch from DB
-            }
-        });
+        try {
+            // Fetch from database
+            const users = await this.userModel
+                .find({ _id: { $in: userIds } })
+                .select('_id lastSeen isOnline');
+
+            users.forEach((user: any) => {
+                const userId = user._id.toString();
+                const userSocketSet = this.userSockets.get(userId);
+
+                if (userSocketSet && userSocketSet.size > 0) {
+                    // User is currently online, get their in-memory last seen
+                    const socketId = Array.from(userSocketSet)[0];
+                    const connectedUser = this.connectedUsers.get(socketId);
+                    lastSeenInfo[userId] = connectedUser?.lastSeen || new Date();
+                } else {
+                    // User is offline, get from database
+                    lastSeenInfo[userId] = user.lastSeen || null;
+                }
+            });
+
+            // Fill in any missing users
+            userIds.forEach(userId => {
+                if (!lastSeenInfo[userId]) {
+                    lastSeenInfo[userId] = null;
+                }
+            });
+
+        } catch (error) {
+            console.error('Error fetching last seen info:', error);
+            // Return nulls on error
+            userIds.forEach(userId => {
+                lastSeenInfo[userId] = null;
+            });
+        }
 
         return lastSeenInfo;
     }

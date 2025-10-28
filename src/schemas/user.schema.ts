@@ -118,6 +118,12 @@ export class User extends Document {
   @Prop({ type: Boolean, default: false })
   is_disabled: boolean;
 
+  @Prop({ type: Date, default: null })
+  lastSeen: Date;
+
+  @Prop({ type: Boolean, default: false })
+  isOnline: boolean;
+
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
