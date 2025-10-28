@@ -230,15 +230,6 @@ export class AuthService {
   // =========Ge My Info =============
   async getMyInfo(id: string) {
     try {
-      const cacheKey = `myInfo${id}`;
-
-
-      const cachedMyInfo = await this.redisCacheService.get(cacheKey);
-
-      if (cachedMyInfo) {
-        return { success: true, data: cachedMyInfo };
-      }
-
       const user = await this.userModel
         .findOne({ _id: id })
         .select('-password')
@@ -255,7 +246,6 @@ export class AuthService {
         result.vendorInfo = vendorInfo
       }
 
-      await this.redisCacheService.set(cacheKey, user, 60);
 
       return { success: true, data: result };
     } catch (error) {
@@ -278,10 +268,6 @@ export class AuthService {
       if (!user) {
         throw new NotFoundException('User not found');
       }
-
-      // Clear Redis cache for user info
-      const cacheKey = `myInfo${userId}`;
-      await this.redisCacheService.del(cacheKey);
 
       return {
         success: true,
