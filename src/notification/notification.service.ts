@@ -485,7 +485,7 @@ export class NotificationService {
   // Helper methods
   private getChannelId(type: NotificationType): string {
     const channelMap = {
-      [NotificationType.CHAT]: 'chat_messages',
+      [NotificationType.CHAT]: 'chat',
       [NotificationType.BOOKING]: 'bookings',
       [NotificationType.ORDER]: 'orders',
       [NotificationType.PAYMENT]: 'payments',
