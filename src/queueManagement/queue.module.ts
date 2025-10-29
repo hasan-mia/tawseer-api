@@ -20,8 +20,8 @@ import { QueueManagementService } from './queue.service';
 
         ]),
     ],
-    providers: [QueueManagementService, QueueGateway],
     controllers: [QueueController],
-    exports: [QueueManagementService],
+    providers: [QueueManagementService, QueueGateway],
+    exports: [QueueManagementService, QueueGateway],
 })
 export class QueueModule { }

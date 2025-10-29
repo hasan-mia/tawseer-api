@@ -65,3 +65,9 @@ export class Appointment extends Document {
 }
 
 export const AppointmentSchema = SchemaFactory.createForClass(Appointment);
+
+AppointmentSchema.index({ vendor: 1, appointment_time: 1 });
+AppointmentSchema.index({ vendor: 1, status: 1, payment_status: 1 });
+AppointmentSchema.index({ user: 1, vendor: 1, status: 1 });
+AppointmentSchema.index({ appointment_time: 1, status: 1 });
+

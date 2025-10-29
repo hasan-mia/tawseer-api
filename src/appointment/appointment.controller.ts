@@ -5,6 +5,8 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Param,
+  Patch,
   Post,
   Request,
   UseGuards
@@ -46,14 +48,46 @@ export class AppointmentController {
   // ======== Get all appointment by salon ID ========
   @Get(':id')
   @HttpCode(HttpStatus.OK)
-  async getAllAppointmentBySalon(@Request() req) {
+  async getAllAppointmentByVendor(@Request() req) {
     return this.appointmentService.getAllAppointmentBySalon(req);
   }
 
   // ======== Get confirm appointment by salon ID ========
   @Get(':id')
   @HttpCode(HttpStatus.OK)
-  async getConfirmAppointmentBySalon(@Request() req) {
+  async getConfirmAppointmentByVendor(@Request() req) {
     return this.appointmentService.getConfirmAppointmentBySalon(req);
   }
+
+
+  // *** NEW: Start appointment (Vendor action) ***
+  @Patch('start/:id')
+  async startAppointment(@Request() req, @Param('id') appointmentId: string) {
+    // Assuming vendor ID is in req.user.vendorId
+    // You may need to adjust based on your auth structure
+    return this.appointmentService.startAppointment(
+      req.user.id,
+      appointmentId,
+    );
+  }
+
+  // *** NEW: Complete appointment (Vendor action) ***
+  @Patch('complete/:id')
+  async completeAppointment(@Request() req, @Param('id') appointmentId: string) {
+    return this.appointmentService.completeAppointment(
+      req.user.id,
+      appointmentId,
+    );
+  }
+
+  // *** NEW: Cancel appointment (Customer action) ***
+  @Patch('cancel/:id')
+  async cancelAppointment(@Request() req, @Param('id') appointmentId: string) {
+    return this.appointmentService.cancelAppointment(
+      req.user.id,
+      appointmentId,
+    );
+  }
+
 }
+

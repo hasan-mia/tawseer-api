@@ -2,6 +2,7 @@
 import { CloudinaryService } from '@/cloudinary/cloudinary.service';
 import { StripeService } from '@/payment/stripe.service';
 import { TransactionService } from '@/payment/transaction.service';
+import { QueueModule } from '@/queueManagement/queue.module';
 import { RedisCacheService } from '@/rediscloud.service';
 import { AppointmentSchema } from '@/schemas/appointment.schema';
 import { ServiceSchema } from '@/schemas/service.schema';
@@ -20,6 +21,7 @@ import { AppointmentService } from './appointment.service';
       { name: 'Appointment', schema: AppointmentSchema },
       { name: 'Transaction', schema: TransactionSchema },
     ]),
+    QueueModule,
   ],
   controllers: [AppointmentController],
   providers: [AppointmentService, TransactionService, CloudinaryService, RedisCacheService, StripeService],

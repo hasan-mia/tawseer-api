@@ -132,4 +132,5 @@ VendorSchema.pre<Vendor>('save', async function (next) {
     next();
 });
 
+VendorSchema.index({ user: 1 });
 VendorSchema.index({ location: '2dsphere' });

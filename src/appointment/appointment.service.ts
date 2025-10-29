@@ -2,9 +2,11 @@
 import { ApiFeatures } from '@/helpers/apiFeatures.helper';
 import { StripeService } from '@/payment/stripe.service';
 import { TransactionService } from '@/payment/transaction.service';
+import { QueueManagementService } from '@/queueManagement/queue.service';
 import { RedisCacheService } from '@/rediscloud.service';
 import { Appointment } from '@/schemas/appointment.schema';
 import { Service } from '@/schemas/service.schema';
+import { QueueGateway } from '@/socket/queue.gateway';
 import {
   Injectable,
   InternalServerErrorException,
@@ -26,7 +28,9 @@ export class AppointmentService {
     private appointmentModel: Model<Appointment>,
     private readonly redisCacheService: RedisCacheService,
     private readonly stripeService: StripeService,
-    private readonly transactionService: TransactionService
+    private readonly transactionService: TransactionService,
+    private readonly queueService: QueueManagementService,
+    private readonly queueGateway: QueueGateway,
   ) { }
 
   // ======== Create new appointment / booking ========
@@ -89,6 +93,12 @@ export class AppointmentService {
         country: 'US',
       });
 
+      // *** ADD TO QUEUE ***
+      const queuePosition = await this.queueService.joinQueue(appointment._id.toString());
+
+      // *** BROADCAST QUEUE UPDATE TO VENDOR ***
+      await this.queueGateway.broadcastQueueUpdate(service.vendor.toString());
+
       return {
         success: true,
         message: 'Appointment created successfully',
@@ -100,6 +110,11 @@ export class AppointmentService {
           ephemeralKey: payment?.ephemeralKey || null,
           customer: payment?.customer || null,
           publishableKey: payment?.publishableKey || null,
+          queuePosition: {
+            position: queuePosition.position,
+            estimatedWaitTime: queuePosition.estimatedWaitTime,
+            isPaid: queuePosition.isPaid,
+          },
         },
       };
     } catch (error) {
@@ -119,24 +134,42 @@ export class AppointmentService {
 
       const exist = await this.appointmentModel
         .findOne({ _id: appointmentId, user: userId })
+        .populate('vendor')
         .exec();
 
       if (!exist) {
-        throw new NotFoundException('Post not found');
+        throw new NotFoundException('Appointment not found');
       }
 
       const updatedData = { ...exist.toObject(), ...data };
 
       const updatedSaveData = await this.appointmentModel.findByIdAndUpdate(
         exist._id,
-        updatedData
+        updatedData,
+        { new: true }
       );
 
-      // remove caching
-      await this.redisCacheService.del('getAllAppointment');
-      await this.redisCacheService.del(`getAllSalonAppointment${exist.vendor}`);
-      await this.redisCacheService.del(`getConfirmSalonAppointment${exist.vendor}`);
-      await this.redisCacheService.del(`getAllUserAppointment${userId}`);
+      // *** CHECK IF STATUS CHANGED TO CANCELLED ***
+      if (data.status === 'cancelled') {
+        await this.queueService.leaveQueue(appointmentId);
+        await this.queueGateway.broadcastQueueUpdate((exist.vendor as any)._id.toString());
+      }
+
+      // *** CHECK IF STATUS CHANGED TO ONGOING ***
+      if (data.status === 'ongoing') {
+        await this.queueService.leaveQueue(appointmentId);
+        await this.queueGateway.broadcastQueueUpdate((exist.vendor as any)._id.toString());
+      }
+
+      // *** CHECK IF PAYMENT STATUS CHANGED TO SUCCESS ***
+      if (data.payment_status === 'success' && exist.payment_status !== 'success') {
+        await this.queueService.updateQueueOnPayment(appointmentId);
+        await this.queueGateway.notifyPaymentUpdate(
+          userId,
+          (exist.vendor as any)._id.toString(),
+          appointmentId,
+        );
+      }
 
       const result = {
         success: true,
@@ -145,6 +178,93 @@ export class AppointmentService {
       };
 
       return result;
+    } catch (error) {
+      throw new InternalServerErrorException(error.message);
+    }
+  }
+
+  // Start Appointment (Vendor Action)
+  async startAppointment(vendorId: string, appointmentId: string) {
+    try {
+      const appointment = await this.appointmentModel
+        .findOne({ _id: appointmentId, vendor: vendorId })
+        .populate('vendor user')
+        .exec();
+
+      if (!appointment) {
+        throw new NotFoundException('Appointment not found');
+      }
+
+      // Update status to ongoing
+      appointment.status = 'ongoing';
+      await appointment.save();
+
+      // Remove from queue
+      await this.queueService.leaveQueue(appointmentId);
+
+      // Broadcast queue update (everyone moves up)
+      await this.queueGateway.broadcastQueueUpdate(vendorId);
+
+      return {
+        success: true,
+        message: 'Appointment started successfully',
+        data: appointment,
+      };
+    } catch (error) {
+      throw new InternalServerErrorException(error.message);
+    }
+  }
+
+  //  Complete Appointment
+  async completeAppointment(vendorId: string, appointmentId: string) {
+    try {
+      const appointment = await this.appointmentModel
+        .findOne({ _id: appointmentId, vendor: vendorId })
+        .exec();
+
+      if (!appointment) {
+        throw new NotFoundException('Appointment not found');
+      }
+
+      appointment.status = 'completed';
+      await appointment.save();
+
+      return {
+        success: true,
+        message: 'Appointment completed successfully',
+        data: appointment,
+      };
+    } catch (error) {
+      throw new InternalServerErrorException(error.message);
+    }
+  }
+
+  // Cancel Appointment
+  async cancelAppointment(userId: string, appointmentId: string) {
+    try {
+      const appointment = await this.appointmentModel
+        .findOne({ _id: appointmentId, user: userId })
+        .populate('vendor')
+        .exec();
+
+      if (!appointment) {
+        throw new NotFoundException('Appointment not found');
+      }
+
+      appointment.status = 'cancelled';
+      await appointment.save();
+
+      // Remove from queue
+      await this.queueService.leaveQueue(appointmentId);
+
+      // Broadcast queue update
+      await this.queueGateway.broadcastQueueUpdate((appointment.vendor as any)._id.toString());
+
+      return {
+        success: true,
+        message: 'Appointment cancelled successfully',
+        data: appointment,
+      };
     } catch (error) {
       throw new InternalServerErrorException(error.message);
     }
@@ -258,11 +378,6 @@ export class AppointmentService {
   async getAllAppointmentByUser(req: any) {
     const userId = req.user.id;
     try {
-      // const cacheKey = `getAllUserAppointment${userId}`;
-      // const cacheData = await this.redisCacheService.get(cacheKey);
-      // if (cacheData) {
-      //   return cacheData;
-      // }
 
       const { status, payment_status } = req.query;
 
@@ -345,8 +460,6 @@ export class AppointmentService {
         nextUrl,
       };
 
-      // await this.redisCacheService.set(cacheKey, data, 60);
-
       return data;
     } catch (error) {
       throw new InternalServerErrorException(error.message);
@@ -355,13 +468,8 @@ export class AppointmentService {
 
   // ======== Get all appointment / order by salon ID ========
   async getAllAppointmentBySalon(req: any) {
-    const salonId = req.params.id;
+    const vendorId = req.params.id;
     try {
-      const cacheKey = `getAllSalonAppointment${salonId}`;
-      const cacheData = await this.redisCacheService.get(cacheKey);
-      if (cacheData) {
-        return cacheData;
-      }
 
       const { keyword, status, payment_status } = req.query;
 
@@ -371,7 +479,7 @@ export class AppointmentService {
         perPage = parseInt(req.query.limit, 10);
       }
       interface AppointmentSearchCriteria {
-        salon: string;
+        vendor: string;
         name?: string;
         status?: string;
         payment_status?: string;
@@ -379,7 +487,7 @@ export class AppointmentService {
 
 
       // Construct the search criteria
-      const searchCriteria: AppointmentSearchCriteria = { salon: salonId, };
+      const searchCriteria: AppointmentSearchCriteria = { vendor: vendorId };
       if (keyword) {
         searchCriteria.name = keyword;
       }
@@ -450,8 +558,6 @@ export class AppointmentService {
         nextUrl,
       };
 
-      await this.redisCacheService.set(cacheKey, data, 60);
-
       return data;
     } catch (error) {
       throw new InternalServerErrorException(error.message);
@@ -460,13 +566,9 @@ export class AppointmentService {
 
   // ======== Get confirm appointment / order by salon ID ========
   async getConfirmAppointmentBySalon(req: any) {
-    const salonId = req.params.id;
+    const vendorId = req.params.id;
     try {
-      const cacheKey = `getConfirmSalonAppointment${salonId}`;
-      const cacheData = await this.redisCacheService.get(cacheKey);
-      if (cacheData) {
-        return cacheData;
-      }
+
 
       const { keyword } = req.query;
 
@@ -477,7 +579,11 @@ export class AppointmentService {
       }
 
       // Construct the search criteria
-      const searchCriteria = { salon: salonId, status: 'confirm', name: String || null };
+      const searchCriteria = {
+        vendor: vendorId,
+        status: 'confirm',
+        name: String || null
+      };
       if (keyword) {
         searchCriteria.name = keyword;
       }
@@ -532,13 +638,9 @@ export class AppointmentService {
         nextUrl,
       };
 
-      await this.redisCacheService.set(cacheKey, data, 60);
-
       return data;
     } catch (error) {
       throw new InternalServerErrorException(error.message);
     }
   }
-
-
 }
