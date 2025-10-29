@@ -3,9 +3,9 @@ import { ApiFeatures } from '@/helpers/apiFeatures.helper';
 import { StripeService } from '@/payment/stripe.service';
 import { TransactionService } from '@/payment/transaction.service';
 import { QueueManagementService } from '@/queueManagement/queue.service';
-import { RedisCacheService } from '@/rediscloud.service';
 import { Appointment } from '@/schemas/appointment.schema';
 import { Service } from '@/schemas/service.schema';
+import { User } from '@/schemas/user.schema';
 import { QueueGateway } from '@/socket/queue.gateway';
 import {
   Injectable,
@@ -14,7 +14,6 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { User } from '../schemas/user.schema';
 import { AppointmentDto } from './dto/appointment.dto';
 
 @Injectable()
@@ -26,7 +25,6 @@ export class AppointmentService {
     private serviceModel: Model<Service>,
     @InjectModel(Appointment.name)
     private appointmentModel: Model<Appointment>,
-    private readonly redisCacheService: RedisCacheService,
     private readonly stripeService: StripeService,
     private readonly transactionService: TransactionService,
     private readonly queueService: QueueManagementService,
@@ -183,7 +181,7 @@ export class AppointmentService {
     }
   }
 
-  // Start Appointment (Vendor Action)
+  // *** Start Appointment (Vendor Action) ***
   async startAppointment(vendorId: string, appointmentId: string) {
     try {
       const appointment = await this.appointmentModel
@@ -202,6 +200,9 @@ export class AppointmentService {
       // Remove from queue
       await this.queueService.leaveQueue(appointmentId);
 
+      // *** Notify other customers they moved up ***
+      await this.queueService.notifyQueueMovement(vendorId);
+
       // Broadcast queue update (everyone moves up)
       await this.queueGateway.broadcastQueueUpdate(vendorId);
 
@@ -215,7 +216,7 @@ export class AppointmentService {
     }
   }
 
-  //  Complete Appointment
+  // *** Complete Appointment ***
   async completeAppointment(vendorId: string, appointmentId: string) {
     try {
       const appointment = await this.appointmentModel
@@ -239,7 +240,7 @@ export class AppointmentService {
     }
   }
 
-  // Cancel Appointment
+  // *** Cancel Appointment ***
   async cancelAppointment(userId: string, appointmentId: string) {
     try {
       const appointment = await this.appointmentModel
@@ -273,11 +274,6 @@ export class AppointmentService {
   // ======== Get all appointment / order ========
   async getAllAppointment(req: any) {
     try {
-      const cacheKey = 'getAllAppointment';
-      const cacheData = await this.redisCacheService.get(cacheKey);
-      if (cacheData) {
-        return cacheData;
-      }
 
       const { keyword, name, status, payment_status } = req.query;
 
@@ -366,7 +362,6 @@ export class AppointmentService {
         nextUrl,
       };
 
-      await this.redisCacheService.set(cacheKey, data, 60);
 
       return data;
     } catch (error) {
@@ -470,7 +465,6 @@ export class AppointmentService {
   async getAllAppointmentBySalon(req: any) {
     const vendorId = req.params.id;
     try {
-
       const { keyword, status, payment_status } = req.query;
 
       let perPage: number | undefined;
@@ -568,7 +562,6 @@ export class AppointmentService {
   async getConfirmAppointmentBySalon(req: any) {
     const vendorId = req.params.id;
     try {
-
 
       const { keyword } = req.query;
 

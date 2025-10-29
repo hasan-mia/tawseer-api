@@ -1,3 +1,4 @@
+import { NotificationService } from '@/notification/notification.service'; // Import NotificationService
 import { Appointment } from '@/schemas/appointment.schema';
 import { Notification, NotificationPriority, NotificationType } from '@/schemas/notification.schema';
 import { User } from '@/schemas/user.schema';
@@ -27,6 +28,7 @@ export class QueueManagementService {
         @InjectModel(Notification.name) private notificationModel: Model<Notification>,
         @InjectModel(User.name) private userModel: Model<User>,
         @InjectModel(Vendor.name) private vendorModel: Model<Vendor>,
+        private readonly notificationService: NotificationService, // *** ADD THIS ***
     ) {
         this.initializeQueues();
     }
@@ -68,17 +70,14 @@ export class QueueManagementService {
      * Build queue for a specific vendor with payment priority
      */
     private buildVendorQueue(vendorId: string, appointments: Appointment[]) {
-        // Sort appointments: paid first, then by appointment time
         const sortedAppointments = appointments.sort((a, b) => {
             const aPaid = a.payment_status === 'success';
             const bPaid = b.payment_status === 'success';
 
-            // If payment status differs, paid comes first
             if (aPaid !== bPaid) {
                 return aPaid ? -1 : 1;
             }
 
-            // If same payment status, sort by appointment time
             return a.appointment_time.getTime() - b.appointment_time.getTime();
         });
 
@@ -103,8 +102,7 @@ export class QueueManagementService {
      * Calculate estimated wait time based on position
      */
     private calculateWaitTime(position: number, appointments: Appointment[]): number {
-        // Average service duration (from Service schema) or default 30 minutes
-        const avgServiceTime = 30; // minutes
+        const avgServiceTime = 30;
         let totalWaitTime = 0;
 
         for (let i = 0; i < position; i++) {
@@ -138,7 +136,6 @@ export class QueueManagementService {
 
         const vendorId = (appointment.vendor as any)._id.toString();
 
-        // Refresh queue for this vendor
         await this.refreshVendorQueue(vendorId);
 
         const position = await this.getQueuePosition(
@@ -147,8 +144,8 @@ export class QueueManagementService {
         );
 
         if (position) {
-            // Send notification to user about their position
-            await this.notifyQueuePosition(position);
+            // *** SEND PUSH NOTIFICATION ***
+            await this.notifyQueuePosition(position, appointment);
         }
 
         return position;
@@ -174,33 +171,48 @@ export class QueueManagementService {
     async updateQueueOnPayment(appointmentId: string): Promise<void> {
         const appointment = await this.appointmentModel
             .findById(appointmentId)
-            .populate('vendor user');
+            .populate('vendor user service');
 
         if (!appointment) return;
 
         const vendorId = (appointment.vendor as any)._id.toString();
-        await this.refreshVendorQueue(vendorId);
-
-        // Notify user of their new position
-        const position = await this.getQueuePosition(
+        const oldPosition = await this.getQueuePosition(
             (appointment.user as any)._id.toString(),
             vendorId
         );
 
-        if (position) {
-            await this.createNotification({
+        await this.refreshVendorQueue(vendorId);
+
+        const newPosition = await this.getQueuePosition(
+            (appointment.user as any)._id.toString(),
+            vendorId
+        );
+
+        if (newPosition) {
+            // *** SEND PUSH NOTIFICATION WITH UPDATED POSITION ***
+            await this.notificationService.sendNotification({
                 recipient: (appointment.user as any)._id.toString(),
-                title: 'Queue Position Updated',
-                body: `Your payment is confirmed! You are now #${position.position} in line.`,
+                title: '🎉 Payment Confirmed!',
+                body: `Your payment is confirmed! You've moved to position #${newPosition.position} in line at ${(appointment.vendor as any).name}.`,
                 type: NotificationType.VENDOR,
                 priority: NotificationPriority.HIGH,
                 data: {
                     appointmentId,
                     vendorId,
-                    position: position.position,
-                    estimatedWaitTime: position.estimatedWaitTime,
+                    serviceName: (appointment.service as any)?.name,
+                    oldPosition: oldPosition?.position,
+                    newPosition: newPosition.position,
+                    estimatedWaitTime: newPosition.estimatedWaitTime,
+                    isPaid: true,
                 },
+                actionUrl: `/appointments/${appointmentId}`,
+                externalId: appointmentId,
+                tags: ['queue', 'payment', 'priority'],
+                sound: 'success',
+                icon: '💳',
             });
+
+            this.logger.log(`Payment confirmed notification sent for appointment ${appointmentId}`);
         }
     }
 
@@ -228,7 +240,7 @@ export class QueueManagementService {
     @Cron(CronExpression.EVERY_MINUTE)
     async sendAppointmentReminders() {
         const now = new Date();
-        const reminderTime = new Date(now.getTime() + 15 * 60 * 1000); // 15 minutes from now
+        const reminderTime = new Date(now.getTime() + 15 * 60 * 1000);
 
         const upcomingAppointments = await this.appointmentModel
             .find({
@@ -241,7 +253,6 @@ export class QueueManagementService {
             .populate('user vendor service');
 
         for (const appointment of upcomingAppointments) {
-            // Check if reminder was already sent
             const existingNotification = await this.notificationModel.findOne({
                 recipient: (appointment.user as any)._id,
                 externalId: appointment._id.toString(),
@@ -251,19 +262,26 @@ export class QueueManagementService {
             });
 
             if (!existingNotification) {
-                await this.createNotification({
+                // *** SEND PUSH NOTIFICATION VIA NotificationService ***
+                await this.notificationService.sendNotification({
                     recipient: (appointment.user as any)._id.toString(),
-                    title: 'Appointment Reminder',
-                    body: `Your appointment is in 15 minutes at ${(appointment.vendor as any).name}`,
+                    title: '⏰ Appointment Reminder',
+                    body: `Your appointment at ${(appointment.vendor as any).name} is in 15 minutes! Please arrive on time.`,
                     type: NotificationType.VENDOR,
                     priority: NotificationPriority.URGENT,
-                    externalId: appointment._id.toString(),
                     data: {
                         appointmentId: appointment._id.toString(),
                         vendorId: (appointment.vendor as any)._id.toString(),
-                        serviceName: (appointment.service as any).name,
+                        vendorName: (appointment.vendor as any).name,
+                        serviceName: (appointment.service as any)?.name,
                         appointmentTime: appointment.appointment_time,
+                        address: (appointment.vendor as any)?.address,
                     },
+                    actionUrl: `/appointments/${appointment._id}`,
+                    externalId: appointment._id.toString(),
+                    tags: ['appointment', 'reminder', 'urgent'],
+                    sound: 'alarm',
+                    icon: '⏰',
                 });
 
                 this.logger.log(`Sent 15-min reminder for appointment ${appointment._id}`);
@@ -282,55 +300,130 @@ export class QueueManagementService {
     ): Promise<void> {
         const vendor = await this.vendorModel.findById(vendorId);
 
-        await this.createNotification({
+        // *** SEND PUSH NOTIFICATION VIA NotificationService ***
+        await this.notificationService.sendNotification({
             recipient: userId,
             sender: vendorId,
-            title: `Message from ${vendor.name}`,
+            title: `📢 Message from ${vendor.name}`,
             body: message,
             type: NotificationType.VENDOR,
             priority: NotificationPriority.HIGH,
-            externalId: appointmentId,
             data: {
                 vendorId,
+                vendorName: vendor.name,
                 appointmentId,
                 customMessage: true,
             },
+            actionUrl: appointmentId ? `/appointments/${appointmentId}` : `/vendors/${vendorId}`,
+            externalId: appointmentId,
+            tags: ['vendor', 'message', 'manual'],
+            sound: 'default',
+            icon: '💬',
         });
+
+        this.logger.log(`Vendor notification sent from ${vendorId} to user ${userId}`);
     }
 
     /**
      * Send notification about queue position
      */
-    private async notifyQueuePosition(position: QueueItem): Promise<void> {
-        await this.createNotification({
+    private async notifyQueuePosition(position: QueueItem, appointment?: any): Promise<void> {
+        const vendor = appointment?.vendor as any;
+        const service = appointment?.service as any;
+
+        let body = '';
+        let icon = '';
+
+        if (position.position === 1) {
+            body = `You're next in line at ${vendor?.name || 'the salon'}! Please be ready.`;
+            icon = '🎯';
+        } else if (position.isPaid) {
+            body = `You're at position #${position.position} (Priority Queue) at ${vendor?.name || 'the salon'}. Estimated wait: ${position.estimatedWaitTime} minutes.`;
+            icon = '⭐';
+        } else {
+            body = `You're at position #${position.position} at ${vendor?.name || 'the salon'}. Estimated wait: ${position.estimatedWaitTime} minutes. Pay now for priority!`;
+            icon = '📍';
+        }
+
+        // *** SEND PUSH NOTIFICATION VIA NotificationService ***
+        await this.notificationService.sendNotification({
             recipient: position.userId,
-            title: 'Queue Position',
-            body: `You are #${position.position} in line. Estimated wait: ${position.estimatedWaitTime} minutes`,
+            title: '📊 Queue Position',
+            body,
             type: NotificationType.VENDOR,
-            priority: NotificationPriority.NORMAL,
+            priority: position.position === 1 ? NotificationPriority.HIGH : NotificationPriority.NORMAL,
             data: {
                 appointmentId: position.appointmentId,
                 vendorId: position.vendorId,
+                vendorName: vendor?.name,
+                serviceName: service?.name,
                 position: position.position,
                 estimatedWaitTime: position.estimatedWaitTime,
                 isPaid: position.isPaid,
+                isNext: position.position === 1,
             },
+            actionUrl: `/appointments/${position.appointmentId}`,
+            externalId: position.appointmentId,
+            tags: ['queue', 'position', position.isPaid ? 'paid' : 'unpaid'],
+            sound: position.position === 1 ? 'alert' : 'default',
+            icon,
         });
+
+        this.logger.log(`Queue position notification sent to user ${position.userId}: #${position.position}`);
     }
 
     /**
-     * Create notification helper
+     * Notify customers when they move up in queue
      */
-    private async createNotification(data: any): Promise<Notification> {
-        const notification = new this.notificationModel({
-            ...data,
-            sentAt: new Date(),
-            isDelivered: false,
-            isRead: false,
-            isPushSent: false,
-        });
+    async notifyQueueMovement(vendorId: string): Promise<void> {
+        const queue = this.queueCache.get(vendorId);
+        if (!queue || queue.length === 0) return;
 
-        return await notification.save();
+        // Notify the first customer they're next
+        if (queue[0]) {
+            const appointment = await this.appointmentModel
+                .findById(queue[0].appointmentId)
+                .populate('vendor service');
+
+            if (appointment) {
+                await this.notificationService.sendNotification({
+                    recipient: queue[0].userId,
+                    title: "🎯 You're Next!",
+                    body: `You're next in line at ${(appointment.vendor as any).name}. Please be ready!`,
+                    type: NotificationType.VENDOR,
+                    priority: NotificationPriority.URGENT,
+                    data: {
+                        appointmentId: queue[0].appointmentId,
+                        vendorId,
+                        position: 1,
+                        isNext: true,
+                    },
+                    actionUrl: `/appointments/${queue[0].appointmentId}`,
+                    externalId: queue[0].appointmentId,
+                    tags: ['queue', 'next', 'urgent'],
+                    sound: 'alert',
+                    icon: '🎯',
+                });
+            }
+        }
+
+        // Notify second customer they're up soon
+        if (queue[1]) {
+            await this.notificationService.sendNotification({
+                recipient: queue[1].userId,
+                title: '⏳ Almost Your Turn',
+                body: `You're #2 in line. Your turn is coming up soon!`,
+                type: NotificationType.VENDOR,
+                priority: NotificationPriority.HIGH,
+                data: {
+                    appointmentId: queue[1].appointmentId,
+                    vendorId,
+                    position: 2,
+                },
+                actionUrl: `/appointments/${queue[1].appointmentId}`,
+                tags: ['queue', 'upcoming'],
+            });
+        }
     }
 
     /**

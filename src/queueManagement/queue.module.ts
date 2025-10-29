@@ -1,3 +1,4 @@
+import { NotificationModule } from '@/notification/notification.module';
 import { AppointmentSchema } from '@/schemas/appointment.schema';
 import { NotificationSchema } from '@/schemas/notification.schema';
 import { UserSchema } from '@/schemas/user.schema';
@@ -19,6 +20,7 @@ import { QueueManagementService } from './queue.service';
             { name: "Vendor", schema: VendorSchema },
 
         ]),
+        NotificationModule
     ],
     controllers: [QueueController],
     providers: [QueueManagementService, QueueGateway],

@@ -204,11 +204,6 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
             socket.join(`conversation:${conversationId}`);
             console.log(`Socket ${socket.id} (User ${userId}) joined conversation: ${conversationId}`);
 
-            // Debug: Log all sockets in this room
-            const room = this.server.sockets.adapter.rooms.get(`conversation:${conversationId}`);
-            console.log(`Room conversation:${conversationId} now has ${room?.size} members`);
-
-
             this.updateUserLastSeen(socket.id);
 
             socket.emit('join-conversation', {
