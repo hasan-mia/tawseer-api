@@ -59,10 +59,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     afterInit(server: Server) {
         console.log('Chat Socket.io Initialized');
 
-        // Set up periodic cleanup of stale connections
-        setInterval(() => {
-            this.cleanupStaleConnections();
-        }, 5 * 60 * 1000);
+        setInterval(this.cleanupStaleConnections.bind(this), 5 * 60 * 1000);
     }
 
     async handleConnection(socket: Socket) {
@@ -866,6 +863,12 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
 
     // Cleanup method
     private cleanupStaleConnections() {
+
+        if (!this.server?.sockets?.sockets) {
+            console.log('Server not initialized or already destroyed.');
+            return;
+        }
+
         const now = new Date();
         const staleThreshold = 10 * 60 * 1000; // 10 minutes
 
