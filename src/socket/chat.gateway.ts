@@ -874,6 +874,10 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
                 console.log(`Cleaning up stale connection for user ${user.userId}, socket ${socketId}`);
 
                 const socket = this.server.sockets.sockets.get(socketId);
+                if (!socket) {
+                    console.log(`Socket ${socketId} not found during cleanup`);
+                    return;
+                }
                 if (socket) {
                     socket.disconnect();
                 }

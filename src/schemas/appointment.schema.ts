@@ -24,7 +24,7 @@ export class Appointment extends Document {
   appointment_time: Date
 
   @Prop({
-    enum: ['pending', 'confirm', 'ongoing', 'completed'],
+    enum: ['pending', 'confirm', 'ongoing', 'completed', 'cancelled'],
     required: true,
     default: 'pending',
   })

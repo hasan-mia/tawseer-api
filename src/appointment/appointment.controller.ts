@@ -5,7 +5,6 @@ import {
   Get,
   HttpCode,
   HttpStatus,
-  Param,
   Patch,
   Post,
   Request,
@@ -52,7 +51,7 @@ export class AppointmentController {
     return this.appointmentService.getAllAppointmentBySalon(req);
   }
 
-  // ======== Get confirm appointment by salon ID ========
+  // ======== Get confirm appointment by vendor ID ========
   @Get(':id')
   @HttpCode(HttpStatus.OK)
   async getConfirmAppointmentByVendor(@Request() req) {
@@ -60,32 +59,33 @@ export class AppointmentController {
   }
 
 
-  // *** NEW: Start appointment (Vendor action) ***
+  // Start appointment (Vendor action)
   @Patch('start/:id')
-  async startAppointment(@Request() req, @Param('id') appointmentId: string) {
-    // Assuming vendor ID is in req.user.vendorId
-    // You may need to adjust based on your auth structure
+  @UseGuards(JwtAuthGuard)
+  async startAppointment(@Request() req) {
     return this.appointmentService.startAppointment(
       req.user.id,
-      appointmentId,
+      req.params.id,
     );
   }
 
-  // *** NEW: Complete appointment (Vendor action) ***
+  // Complete appointment (Vendor action)
   @Patch('complete/:id')
-  async completeAppointment(@Request() req, @Param('id') appointmentId: string) {
+  @UseGuards(JwtAuthGuard)
+  async completeAppointment(@Request() req) {
     return this.appointmentService.completeAppointment(
       req.user.id,
-      appointmentId,
+      req.params.id,
     );
   }
 
-  // *** NEW: Cancel appointment (Customer action) ***
+  // Cancel appointment (Customer action)
   @Patch('cancel/:id')
-  async cancelAppointment(@Request() req, @Param('id') appointmentId: string) {
+  @UseGuards(JwtAuthGuard)
+  async cancelAppointment(@Request() req) {
     return this.appointmentService.cancelAppointment(
       req.user.id,
-      appointmentId,
+      req.params.id,
     );
   }
 
