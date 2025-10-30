@@ -27,8 +27,7 @@ export class QueueGateway
     public server: Server;
 
     private readonly logger = new Logger(QueueGateway.name);
-
-    private connectedUsers: Map<string, string> = new Map(); // userId -> socketId
+    private connectedUsers: Map<string, string> = new Map();
 
     constructor(
         private readonly queueService: QueueManagementService,
@@ -63,7 +62,6 @@ export class QueueGateway
             }
 
             this.connectedUsers.set(userId.toString(), client.id);
-
             client.data.userId = userId.toString();
             client.data.authenticated = true;
 
@@ -76,7 +74,6 @@ export class QueueGateway
     }
 
     handleDisconnect(client: Socket) {
-        // Remove disconnected user
         for (const [userId, socketId] of this.connectedUsers.entries()) {
             if (socketId === client.id) {
                 this.connectedUsers.delete(userId);
@@ -96,8 +93,18 @@ export class QueueGateway
         data: { vendorId: string; userId: string; appointmentId: string },
     ) {
         try {
+            this.logger.log(`User ${data.userId} joining queue for vendor ${data.vendorId}`);
+
+            // Add small delay to ensure appointment is in database
+            await new Promise(resolve => setTimeout(resolve, 100));
+
             const position = await this.queueService.joinQueue(data.appointmentId);
 
+            if (!position) {
+                throw new Error('Failed to get queue position after joining');
+            }
+
+            // Emit to the user who joined
             client.emit('queue-position-update', {
                 position: position.position,
                 estimatedWaitTime: position.estimatedWaitTime,
@@ -105,17 +112,22 @@ export class QueueGateway
                 appointmentId: data.appointmentId,
             });
 
-            // Notify vendor of new customer in queue
+            // Notify vendor
             this.server.to(`vendor-${data.vendorId}`).emit('queue-update', {
                 action: 'customer-joined',
                 userId: data.userId,
                 position,
             });
 
+            this.logger.log(`✅ User ${data.userId} joined queue at position ${position.position}`);
+
             return { success: true, position };
         } catch (error) {
-            this.logger.error(`Error joining queue: ${error.message}`);
-            return { success: false, error: error.message };
+            this.logger.error(`❌ Error joining queue: ${error.message}`, error.stack);
+            return {
+                success: false,
+                error: error.message || 'Failed to join queue. Please try again.'
+            };
         }
     }
 
@@ -129,6 +141,8 @@ export class QueueGateway
         data: { vendorId: string; userId: string; appointmentId: string },
     ) {
         try {
+            this.logger.log(`User ${data.userId} leaving queue for vendor ${data.vendorId}`);
+
             await this.queueService.leaveQueue(data.appointmentId);
 
             this.server.to(`vendor-${data.vendorId}`).emit('queue-update', {
@@ -136,10 +150,15 @@ export class QueueGateway
                 userId: data.userId,
             });
 
+            this.logger.log(`✅ User ${data.userId} left queue successfully`);
+
             return { success: true };
         } catch (error) {
-            this.logger.error(`Error leaving queue: ${error.message}`);
-            return { success: false, error: error.message };
+            this.logger.error(`❌ Error leaving queue: ${error.message}`);
+            return {
+                success: false,
+                error: error.message || 'Failed to leave queue'
+            };
         }
     }
 
@@ -152,19 +171,31 @@ export class QueueGateway
         @MessageBody() data: { vendorId: string; userId: string },
     ) {
         try {
+            this.logger.log(`User ${data.userId} requesting queue position for vendor ${data.vendorId}`);
+
             const position = await this.queueService.getQueuePosition(
                 data.userId,
                 data.vendorId,
             );
 
             if (!position) {
-                return { success: false, error: 'Not in queue' };
+                this.logger.log(`User ${data.userId} is not in queue for vendor ${data.vendorId}`);
+                return {
+                    success: true,
+                    position: null,
+                    message: 'Not in queue'
+                };
             }
+
+            this.logger.log(`✅ Found position for user ${data.userId}: #${position.position}`);
 
             return { success: true, position };
         } catch (error) {
-            this.logger.error(`Error getting position: ${error.message}`);
-            return { success: false, error: error.message };
+            this.logger.error(`❌ Error getting position: ${error.message}`);
+            return {
+                success: false,
+                error: error.message || 'Failed to get queue position'
+            };
         }
     }
 
@@ -176,10 +207,24 @@ export class QueueGateway
         @ConnectedSocket() client: Socket,
         @MessageBody() data: { vendorId: string },
     ) {
-        client.join(`vendor-${data.vendorId}`);
-        const queue = await this.queueService.getVendorQueue(data.vendorId);
-        client.emit('vendor-queue-data', { queue });
-        return { success: true, message: 'Subscribed to vendor queue' };
+        try {
+            this.logger.log(`Vendor ${data.vendorId} subscribing to queue updates`);
+
+            client.join(`vendor-${data.vendorId}`);
+            const queue = await this.queueService.getVendorQueue(data.vendorId);
+
+            client.emit('vendor-queue-data', { queue });
+
+            this.logger.log(`✅ Vendor ${data.vendorId} subscribed to queue (${queue.length} items)`);
+
+            return { success: true, message: 'Subscribed to vendor queue' };
+        } catch (error) {
+            this.logger.error(`❌ Error subscribing to vendor queue: ${error.message}`);
+            return {
+                success: false,
+                error: error.message || 'Failed to subscribe to vendor queue'
+            };
+        }
     }
 
     /**
@@ -217,7 +262,10 @@ export class QueueGateway
             return { success: true };
         } catch (error) {
             this.logger.error(`Error sending notification: ${error.message}`);
-            return { success: false, error: error.message };
+            return {
+                success: false,
+                error: error.message || 'Failed to send notification'
+            };
         }
     }
 
@@ -225,21 +273,29 @@ export class QueueGateway
      * Broadcast queue position updates to all users in a vendor's queue
      */
     async broadcastQueueUpdate(vendorId: string) {
-        const queue = await this.queueService.getVendorQueue(vendorId);
+        try {
+            this.logger.log(`Broadcasting queue update for vendor ${vendorId}`);
 
-        for (const item of queue) {
-            const socketId = this.connectedUsers.get(item.userId);
-            if (socketId) {
-                this.server.to(socketId).emit('queue-position-update', {
-                    position: item.position,
-                    estimatedWaitTime: item.estimatedWaitTime,
-                    isPaid: item.isPaid,
-                    appointmentId: item.appointmentId,
-                });
+            const queue = await this.queueService.getVendorQueue(vendorId);
+
+            for (const item of queue) {
+                const socketId = this.connectedUsers.get(item.userId);
+                if (socketId) {
+                    this.server.to(socketId).emit('queue-position-update', {
+                        position: item.position,
+                        estimatedWaitTime: item.estimatedWaitTime,
+                        isPaid: item.isPaid,
+                        appointmentId: item.appointmentId,
+                    });
+                }
             }
-        }
 
-        this.server.to(`vendor-${vendorId}`).emit('vendor-queue-data', { queue });
+            this.server.to(`vendor-${vendorId}`).emit('vendor-queue-data', { queue });
+
+            this.logger.log(`✅ Broadcast complete for vendor ${vendorId} (${queue.length} users)`);
+        } catch (error) {
+            this.logger.error(`❌ Error broadcasting queue update: ${error.message}`);
+        }
     }
 
     /**
@@ -250,20 +306,24 @@ export class QueueGateway
         vendorId: string,
         appointmentId: string,
     ) {
-        const position = await this.queueService.getQueuePosition(userId, vendorId);
+        try {
+            const position = await this.queueService.getQueuePosition(userId, vendorId);
 
-        if (position) {
-            const socketId = this.connectedUsers.get(userId);
-            if (socketId) {
-                this.server.to(socketId).emit('payment-confirmed', {
-                    position: position.position,
-                    estimatedWaitTime: position.estimatedWaitTime,
-                    isPaid: position.isPaid,
-                    appointmentId,
-                });
+            if (position) {
+                const socketId = this.connectedUsers.get(userId);
+                if (socketId) {
+                    this.server.to(socketId).emit('payment-confirmed', {
+                        position: position.position,
+                        estimatedWaitTime: position.estimatedWaitTime,
+                        isPaid: position.isPaid,
+                        appointmentId,
+                    });
+                }
             }
-        }
 
-        await this.broadcastQueueUpdate(vendorId);
+            await this.broadcastQueueUpdate(vendorId);
+        } catch (error) {
+            this.logger.error(`Error notifying payment update: ${error.message}`);
+        }
     }
 }
