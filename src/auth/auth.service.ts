@@ -264,7 +264,7 @@ export class AuthService {
       let result: any = user.toObject();
 
       if (user.role === 'vendor') {
-        const vendorInfo = await this.vendorModel.findOne({ user: id }).select('name logo cover type mobile slug')
+        const vendorInfo = await this.vendorModel.findOne({ user: id })
         result.vendorInfo = vendorInfo
       }
 
