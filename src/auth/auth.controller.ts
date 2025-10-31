@@ -52,11 +52,9 @@ export class AuthController {
 
   // ======== Reset otp ========
   @Put('reset-password')
-  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   resetPassword(@Body() data: OtpDto, @Request() req) {
-    const user = req.user;
-    return this.authService.resetPassword(user.id, data);
+    return this.authService.resetPassword(data);
   }
 
   // ======== Get my Information ========

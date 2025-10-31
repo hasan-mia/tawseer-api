@@ -199,19 +199,26 @@ export class AuthService {
   }
 
   // =============== Reset password with otp =================
-  async resetPassword(userId: string, data: OtpDto) {
+  async resetPassword(data: OtpDto) {
     try {
-      const { password } = data;
-      const user = await this.userModel.findOne({ _id: userId });
+      const { email, otp, password } = data;
+
+      const varify = await this.varifyOtp({ email, otp });
+
+      if (!varify && !varify.token) {
+        throw new UnauthorizedException('Invalid OTP');
+      }
+
+      const user = await this.userModel.findOne({ email: email });
 
       if (!user) {
-        throw new UnauthorizedException('Invalid OTP');
+        throw new NotFoundException('User not found.');
       }
 
       // Hash the password
       const hashedPassword = await bcrypt.hash(password, 10);
 
-      await this.userModel.findOneAndUpdate({ _id: userId }, { password: hashedPassword });
+      await this.userModel.findOneAndUpdate({ _id: user._id }, { password: hashedPassword });
 
       const result = {
         message: 'Password reset successfully',

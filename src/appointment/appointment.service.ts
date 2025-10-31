@@ -6,6 +6,7 @@ import { QueueManagementService } from '@/queueManagement/queue.service';
 import { Appointment } from '@/schemas/appointment.schema';
 import { Service } from '@/schemas/service.schema';
 import { User } from '@/schemas/user.schema';
+import { Vendor } from '@/schemas/vendor.schema';
 import { QueueGateway } from '@/socket/queue.gateway';
 import {
   Injectable,
@@ -13,7 +14,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { AppointmentDto } from './dto/appointment.dto';
 
 @Injectable()
@@ -21,6 +22,8 @@ export class AppointmentService {
   constructor(
     @InjectModel(User.name)
     private userModel: Model<User>,
+    @InjectModel(Vendor.name)
+    private vendorModel: Model<Vendor>,
     @InjectModel(Service.name)
     private serviceModel: Model<Service>,
     @InjectModel(Appointment.name)
@@ -116,6 +119,9 @@ export class AppointmentService {
         },
       };
     } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
@@ -177,15 +183,23 @@ export class AppointmentService {
 
       return result;
     } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
 
-  // *** Start Appointment (Vendor Action) ***
-  async startAppointment(vendorId: string, appointmentId: string) {
+  async startAppointment(userId: string, appointmentId: string) {
     try {
+      const vendor = await this.vendorModel.findOne({ user: userId }).populate('_id').exec();
+
+      if (!vendor) {
+        throw new NotFoundException('Vendor not found');
+      }
+
       const appointment = await this.appointmentModel
-        .findOne({ _id: appointmentId, vendor: vendorId })
+        .findOne({ _id: appointmentId, vendor: vendor._id })
         .populate('vendor user')
         .exec();
 
@@ -201,10 +215,10 @@ export class AppointmentService {
       await this.queueService.leaveQueue(appointmentId);
 
       // *** Notify other customers they moved up ***
-      await this.queueService.notifyQueueMovement(vendorId);
+      await this.queueService.notifyQueueMovement(vendor._id.toString());
 
       // Broadcast queue update (everyone moves up)
-      await this.queueGateway.broadcastQueueUpdate(vendorId);
+      await this.queueGateway.broadcastQueueUpdate(vendor._id.toString());
 
       return {
         success: true,
@@ -212,15 +226,23 @@ export class AppointmentService {
         data: appointment,
       };
     } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
 
-  // *** Complete Appointment ***
-  async completeAppointment(vendorId: string, appointmentId: string) {
+  async completeAppointment(userId: string, appointmentId: string) {
     try {
+      const vendor = await this.vendorModel.findOne({ user: userId }).populate('_id').exec();
+
+      if (!vendor) {
+        throw new NotFoundException('Vendor not found');
+      }
+
       const appointment = await this.appointmentModel
-        .findOne({ _id: appointmentId, vendor: vendorId })
+        .findOne({ _id: appointmentId, vendor: vendor._id })
         .exec();
 
       if (!appointment) {
@@ -236,11 +258,13 @@ export class AppointmentService {
         data: appointment,
       };
     } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
 
-  // *** Cancel Appointment ***
   async cancelAppointment(userId: string, appointmentId: string) {
     try {
       const appointment = await this.appointmentModel
@@ -267,6 +291,9 @@ export class AppointmentService {
         data: appointment,
       };
     } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
@@ -365,6 +392,9 @@ export class AppointmentService {
 
       return data;
     } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
@@ -457,13 +487,17 @@ export class AppointmentService {
 
       return data;
     } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
 
-  // ======== Get all appointment / order by salon ID ========
-  async getAllAppointmentBySalon(req: any) {
+  // ======== Get all appointment / order by Vendor ID ========
+  async getAllAppointmentByVendor(req: any) {
     const vendorId = req.params.id;
+
     try {
       const { keyword, status, payment_status } = req.query;
 
@@ -473,15 +507,14 @@ export class AppointmentService {
         perPage = parseInt(req.query.limit, 10);
       }
       interface AppointmentSearchCriteria {
-        vendor: string;
+        vendor: string | Types.ObjectId;
         name?: string;
         status?: string;
         payment_status?: string;
       }
 
-
       // Construct the search criteria
-      const searchCriteria: AppointmentSearchCriteria = { vendor: vendorId };
+      const searchCriteria: AppointmentSearchCriteria = { vendor: new Types.ObjectId(vendorId) };
       if (keyword) {
         searchCriteria.name = keyword;
       }
@@ -554,6 +587,9 @@ export class AppointmentService {
 
       return data;
     } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }
@@ -633,6 +669,9 @@ export class AppointmentService {
 
       return data;
     } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException(error.message);
     }
   }

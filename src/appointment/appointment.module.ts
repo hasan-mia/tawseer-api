@@ -8,6 +8,7 @@ import { AppointmentSchema } from '@/schemas/appointment.schema';
 import { ServiceSchema } from '@/schemas/service.schema';
 import { TransactionSchema } from '@/schemas/transaction.schema';
 import { UserSchema } from '@/schemas/user.schema';
+import { VendorSchema } from '@/schemas/vendor.schema';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AppointmentController } from './appointment.controller';
@@ -17,6 +18,7 @@ import { AppointmentService } from './appointment.service';
   imports: [
     MongooseModule.forFeature([
       { name: 'User', schema: UserSchema },
+      { name: 'Vendor', schema: VendorSchema },
       { name: 'Service', schema: ServiceSchema },
       { name: 'Appointment', schema: AppointmentSchema },
       { name: 'Transaction', schema: TransactionSchema },

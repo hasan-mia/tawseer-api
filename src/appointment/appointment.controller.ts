@@ -44,20 +44,12 @@ export class AppointmentController {
     return this.appointmentService.getAllAppointmentByUser(req);
   }
 
-  // ======== Get all appointment by salon ID ========
+  // ======== Get all appointment by Vendor ID ========
   @Get(':id')
   @HttpCode(HttpStatus.OK)
   async getAllAppointmentByVendor(@Request() req) {
-    return this.appointmentService.getAllAppointmentBySalon(req);
+    return this.appointmentService.getAllAppointmentByVendor(req);
   }
-
-  // ======== Get confirm appointment by vendor ID ========
-  @Get(':id')
-  @HttpCode(HttpStatus.OK)
-  async getConfirmAppointmentByVendor(@Request() req) {
-    return this.appointmentService.getConfirmAppointmentBySalon(req);
-  }
-
 
   // Start appointment (Vendor action)
   @Patch('start/:id')
