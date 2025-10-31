@@ -1,3 +1,5 @@
+import { NotificationModule } from '@/notification/notification.module';
+import { QueueModule } from '@/queueManagement/queue.module';
 import { AppointmentSchema } from '@/schemas/appointment.schema';
 import { TransactionSchema } from '@/schemas/transaction.schema';
 import { Module } from '@nestjs/common';
@@ -12,6 +14,8 @@ import { TransactionService } from './transaction.service';
       { name: 'Appointment', schema: AppointmentSchema },
       { name: 'Transaction', schema: TransactionSchema },
     ]),
+    NotificationModule,
+    QueueModule,
   ],
   controllers: [StripeController],
   providers: [StripeService, TransactionService],
