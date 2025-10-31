@@ -44,10 +44,10 @@ export class AuthController {
   }
 
   // ======== Reset otp ========
-  @Put('varify-otp')
+  @Post('verify-otp')
   @HttpCode(HttpStatus.OK)
-  varifyOtp(@Body() data: OtpDto) {
-    return this.authService.varifyOtp(data);
+  verifyOtp(@Body() data: OtpDto) {
+    return this.authService.verifyOtp(data);
   }
 
   // ======== Reset otp ========
