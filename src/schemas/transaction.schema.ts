@@ -77,7 +77,7 @@ export class Transaction extends Document {
   vendor: Types.ObjectId;
 
   @Prop({
-    enum: ['Service', 'Product', 'Appointment', 'Subscription'],
+    enum: ['service', 'product', 'appointment', 'subscription'],
     required: true,
   })
   referenceType: string;
