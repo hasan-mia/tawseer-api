@@ -3,7 +3,7 @@ import { NotificationService } from '@/notification/notification.service';
 import { Conversation } from '@/schemas/conversation.schema';
 import { NotificationType } from '@/schemas/notification.schema';
 import { User } from '@/schemas/user.schema';
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/mongoose';
 import {
@@ -26,6 +26,12 @@ interface ConnectedUser {
     lastSeen: Date;
 }
 
+interface CleanupStats {
+    lastRun: Date | null;
+    totalCleaned: number;
+    errors: number;
+}
+
 @WebSocketGateway({
     cors: {
         origin: '*',
@@ -35,16 +41,31 @@ interface ConnectedUser {
     namespace: '/chat',
 })
 @Injectable()
-export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
+export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect, OnModuleDestroy {
     @WebSocketServer()
     public server: Server;
 
-    // Enhanced user tracking
-    private connectedUsers = new Map<string, ConnectedUser>();
-    private userSockets = new Map<string, Set<string>>(); // userId -> Set of socketIds
-    private typingUsers = new Map<string, Set<string>>();
-    private statusBroadcastQueue = new Map<string, NodeJS.Timeout>();
-    private processingMessages = new Set<string>();
+    // Connection tracking
+    private readonly connectedUsers = new Map<string, ConnectedUser>();
+    private readonly userSockets = new Map<string, Set<string>>(); // userId -> Set of socketIds
+    private readonly typingUsers = new Map<string, Set<string>>();
+    private readonly statusBroadcastQueue = new Map<string, NodeJS.Timeout>();
+    private readonly processingMessages = new Set<string>();
+
+    // Cleanup configuration
+    private cleanupInterval: NodeJS.Timeout | null = null;
+    private readonly CLEANUP_INTERVAL = 5 * 60 * 1000; // 5 minutes
+    private readonly STALE_THRESHOLD = 10 * 60 * 1000; // 10 minutes
+    private readonly HEARTBEAT_DB_UPDATE_INTERVAL = 10; // Update DB every 10 heartbeats
+    private readonly MESSAGE_DUPLICATE_TIMEOUT = 2000; // 2 seconds
+    private readonly STATUS_BROADCAST_DEBOUNCE = 1000; // 1 second
+
+    // Metrics
+    private cleanupStats: CleanupStats = {
+        lastRun: null,
+        totalCleaned: 0,
+        errors: 0
+    };
 
     constructor(
         @InjectModel(Conversation.name)
@@ -56,121 +77,73 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         private jwtService: JwtService
     ) { }
 
-    afterInit(server: Server) {
-        console.log('Chat Socket.io Initialized');
+    // ============ LIFECYCLE HOOKS ============
 
-        setInterval(this.cleanupStaleConnections.bind(this), 5 * 60 * 1000);
+    afterInit(server: Server) {
+        console.log('🚀 Chat Socket.io Initialized');
+        this.startCleanupInterval();
     }
 
     async handleConnection(socket: Socket) {
         try {
-            console.log(`Client attempting connection: ${socket.id}`);
+            console.log(`🔌 Client attempting connection: ${socket.id}`);
 
-            const token = socket.handshake.auth.token ||
-                socket.handshake.headers.authorization?.split(' ')[1] ||
-                socket.handshake.query.token;
-
+            // Extract and verify token
+            const token = this.extractToken(socket);
             if (!token) {
-                console.log('No token provided, disconnecting socket', socket.id);
-                socket.emit('auth_error', { message: 'No authentication token provided' });
-                socket.disconnect();
+                this.handleAuthError(socket, 'No authentication token provided');
                 return;
             }
 
-            const payload = this.jwtService.verify(token);
-            const userId = payload.sub || payload.id || payload._id;
-
+            // Verify JWT and extract user ID
+            const userId = await this.verifyTokenAndGetUserId(token);
             if (!userId) {
-                throw new Error('Invalid user ID in token');
+                this.handleAuthError(socket, 'Invalid authentication token');
+                return;
             }
 
-            // Handle multiple connections for same user (different devices/tabs)
-            if (!this.userSockets.has(userId)) {
-                this.userSockets.set(userId, new Set());
-            }
-            this.userSockets.get(userId).add(socket.id);
+            // Register connection
+            await this.registerConnection(socket, userId);
 
-            // Store connection info
-            this.connectedUsers.set(socket.id, {
-                userId: userId.toString(),
-                socketId: socket.id,
-                joinedAt: new Date(),
-                lastSeen: new Date()
-            });
-
-            // Join user to their personal room
-            socket.join(`user:${userId}`);
-            socket.join(`notifications:${userId}`);
-            socket.data.userId = userId.toString();
-            socket.data.authenticated = true;
-
-            console.log(`User ${userId} authenticated with socket ${socket.id}`);
-
-            await this.userModel.findByIdAndUpdate(userId, {
-                isOnline: true,
-                lastSeen: new Date()
-            });
-
-            // Broadcast user came online (debounced)
-            this.debouncedStatusBroadcast(userId.toString(), true);
-
-            // Send current unread notification count
-            const unreadNotificationCount = await this.notificationService.getUnreadCount(userId.toString());
-            const unreadMsg = await this.messageService.getUnreadMessageCount(userId);
-
-
-            socket.emit('connection_success', {
-                message: 'Successfully connected',
-                userId: userId.toString(),
-            });
-
-            // Send unread count update
-            socket.emit('unread-count-update', {
-                count: unreadNotificationCount,
-                unreadMsgCount: unreadMsg.data,
-                timestamp: new Date(),
-            });
+            console.log(`✅ User ${userId} authenticated with socket ${socket.id}`);
 
         } catch (error) {
-            console.error('Socket connection error:', error);
-            socket.emit('auth_error', { message: 'Invalid authentication token' });
-            socket.disconnect();
+            console.error('❌ Socket connection error:', error);
+            this.handleAuthError(socket, 'Authentication failed');
         }
     }
 
-    handleDisconnect(socket: Socket) {
-        console.log(`Client disconnected: ${socket.id}`);
+    async handleDisconnect(socket: Socket) {
+        console.log(`🔌 Client disconnected: ${socket.id}`);
 
         const connectedUser = this.connectedUsers.get(socket.id);
-        if (connectedUser) {
-            const userId = connectedUser.userId;
-
-            // Remove from connected users
-            this.connectedUsers.delete(socket.id);
-
-            // Remove socket from user's socket set
-            const userSocketSet = this.userSockets.get(userId);
-            if (userSocketSet) {
-                userSocketSet.delete(socket.id);
-
-                // If no more sockets for this user, they're offline
-                if (userSocketSet.size === 0) {
-                    this.userSockets.delete(userId);
-
-                    // SAVE LAST SEEN TO DATABASE
-                    this.updateUserLastSeenInDB(userId).catch(err =>
-                        console.error('Error updating last seen:', err)
-                    );
-
-                    // Remove from typing and broadcast offline status
-                    this.removeFromAllTyping(userId);
-                    this.debouncedStatusBroadcast(userId, false);
-                }
-            }
-
-            console.log(`User ${userId} disconnected. Remaining connections: ${userSocketSet?.size || 0}`);
+        if (!connectedUser) {
+            return;
         }
+
+        await this.unregisterConnection(socket.id, connectedUser.userId);
     }
+
+    async onModuleDestroy() {
+        console.log('🛑 Shutting down ChatGateway...');
+
+        // Stop cleanup interval
+        if (this.cleanupInterval) {
+            clearInterval(this.cleanupInterval);
+            this.cleanupInterval = null;
+            console.log('✅ Cleanup interval stopped');
+        }
+
+        // Clear all pending timeouts
+        this.clearAllPendingTimeouts();
+
+        // Disconnect all clients gracefully
+        await this.disconnectAllClients();
+
+        console.log('✅ ChatGateway shutdown complete');
+    }
+
+    // ============ CONVERSATION MANAGEMENT ============
 
     @SubscribeMessage('join-conversation')
     async handleJoinConversation(
@@ -178,30 +151,28 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         @MessageBody() data: { conversationId: string }
     ) {
         try {
-            if (!socket.data.authenticated) {
-                socket.emit('join-conversation', { success: false, error: 'Not authenticated' });
-                return;
+            if (!this.isAuthenticated(socket)) {
+                return this.emitError(socket, 'join-conversation', 'Not authenticated');
             }
 
             const { conversationId } = data;
             const userId = socket.data.userId;
 
-            // Verify user is part of this conversation
+            // Verify user authorization
             const conversation = await this.conversationModel.findById(conversationId);
             if (!conversation) {
-                socket.emit('join-conversation', { success: false, error: 'Conversation not found' });
-                return;
+                return this.emitError(socket, 'join-conversation', 'Conversation not found');
             }
 
-            if (!conversation.participants.some(p => p.toString() === userId)) {
-                socket.emit('join-conversation', { success: false, error: 'Not authorized to join this conversation' });
-                return;
+            if (!this.isUserInConversation(conversation, userId)) {
+                return this.emitError(socket, 'join-conversation', 'Not authorized to join this conversation');
             }
 
+            // Join room
             socket.join(`conversation:${conversationId}`);
-            console.log(`Socket ${socket.id} (User ${userId}) joined conversation: ${conversationId}`);
-
             this.updateUserLastSeen(socket.id);
+
+            console.log(`✅ Socket ${socket.id} (User ${userId}) joined conversation: ${conversationId}`);
 
             socket.emit('join-conversation', {
                 conversationId,
@@ -210,8 +181,8 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
             });
 
         } catch (error) {
-            console.error('Error joining conversation:', error);
-            socket.emit('join-conversation', { success: false, error: error.message });
+            console.error('❌ Error joining conversation:', error);
+            this.emitError(socket, 'join-conversation', error.message);
         }
     }
 
@@ -221,21 +192,26 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         @MessageBody() data: { conversationId: string }
     ) {
         try {
+            if (!this.isAuthenticated(socket)) {
+                return { event: 'leave-conversation', data: { success: false, error: 'Not authenticated' } };
+            }
+
             const { conversationId } = data;
             const userId = socket.data.userId;
 
             socket.leave(`conversation:${conversationId}`);
-            console.log(`Socket ${socket.id} (User ${userId}) left conversation: ${conversationId}`);
-
-            // Remove from typing if they were typing
             this.removeFromTyping(conversationId, userId);
+
+            console.log(`✅ Socket ${socket.id} (User ${userId}) left conversation: ${conversationId}`);
 
             return { event: 'leave-conversation', data: { conversationId, success: true } };
         } catch (error) {
-            console.error('Error leaving conversation:', error);
+            console.error('❌ Error leaving conversation:', error);
             return { event: 'leave-conversation', data: { success: false, error: error.message } };
         }
     }
+
+    // ============ MESSAGE HANDLING ============
 
     @SubscribeMessage('get-messages')
     async handleGetMessages(
@@ -243,9 +219,8 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         @MessageBody() data: { conversationId: string; page?: number; limit?: number }
     ) {
         try {
-            if (!socket.data.authenticated) {
-                socket.emit('get-messages', { success: false, error: 'Not authenticated' });
-                return;
+            if (!this.isAuthenticated(socket)) {
+                return this.emitError(socket, 'get-messages', 'Not authenticated');
             }
 
             const userId = socket.data.userId;
@@ -265,14 +240,13 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
                 mockReq
             );
 
-            console.log(`Messages fetched for conversation ${data.conversationId}, page ${data.page ?? 1}`);
+            console.log(`📨 Messages fetched for conversation ${data.conversationId}, page ${data.page ?? 1}`);
 
-            // Emit response directly to the requesting socket
             socket.emit('get-messages', result);
 
         } catch (error) {
-            console.error('Error fetching messages:', error);
-            socket.emit('get-messages', { success: false, error: error.message });
+            console.error('❌ Error fetching messages:', error);
+            this.emitError(socket, 'get-messages', error.message);
         }
     }
 
@@ -287,175 +261,43 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         }
     ) {
         try {
-            if (!socket.data.authenticated) {
-                socket.emit('message-failure', {
-                    success: false,
-                    error: 'Not authenticated',
-                    tempId: data.tempId
-                });
-                return;
+            if (!this.isAuthenticated(socket)) {
+                return this.emitMessageFailure(socket, data.tempId, 'Not authenticated');
             }
 
             const senderId = socket.data.userId;
 
+            // Validate input
             if (!data.conversationId || !data.content?.trim()) {
-                socket.emit('message-failure', {
-                    success: false,
-                    error: 'Invalid message data',
-                    tempId: data.tempId
-                });
-                return;
+                return this.emitMessageFailure(socket, data.tempId, 'Invalid message data');
             }
 
-            const { conversationId, content, attachments } = data;
-
-            this.updateUserLastSeen(socket.id);
-            this.removeFromTyping(conversationId, senderId);
-
-            // duplicate prevention
+            // Prevent duplicate messages
             const messageKey = `${socket.id}-${data.tempId}`;
             if (this.processingMessages.has(messageKey)) {
-                console.log('Ignoring duplicate from same socket with same tempId');
+                console.log('⚠️ Ignoring duplicate message from same socket with same tempId');
                 return;
             }
+
             this.processingMessages.add(messageKey);
+            this.updateUserLastSeen(socket.id);
+            this.removeFromTyping(data.conversationId, senderId);
 
             try {
-                // Save message to database
-                const messageResult = await this.messageService.sendMessage({
-                    senderId,
-                    conversationId,
-                    content: content.trim(),
-                    attachments: attachments || []
-                });
-
-                if (messageResult.success && messageResult.data) {
-                    console.log(`Message sent successfully in conversation ${conversationId}`);
-
-                    // Emit success to sender
-                    socket.emit('send-message', {
-                        success: true,
-                        message: messageResult.data,
-                        tempId: data.tempId
-                    });
-
-                    this.server.to(`conversation:${conversationId}`)
-                        .except(socket.id)
-                        .emit('new-message', {
-                            message: messageResult.data,
-                            conversationId,
-                        });
-
-
-                    // Get conversation participants for notifications
-                    const conversation = await this.conversationModel
-                        .findById(conversationId)
-                        .populate('participants', 'first_name last_name avatar fcmToken');
-
-                    if (conversation) {
-                        // Broadcast to other participants in the room
-                        this.server.to(`conversation:${conversationId}`)
-                            .except(socket.id)
-                            .emit('new-message', {
-                                message: messageResult.data,
-                                conversationId,
-                            });
-
-                        // Handle notifications for other participants
-                        const otherParticipants = conversation.participants.filter(
-                            (participant: any) => participant._id.toString() !== senderId
-                        );
-
-                        for (const participant of otherParticipants) {
-                            const participantId = participant._id.toString();
-
-                            // Get unread count
-                            const unreadNotificationCount = await this.notificationService.getUnreadCount(participantId);
-                            const unreadData = await this.messageService.getUnreadMessageCount(participantId);
-
-                            // Emit to user
-                            this.server.to(`user:${participantId}`).emit('unread-count-update', {
-                                count: unreadNotificationCount,
-                                unreadMsgCount: unreadData.data,
-                                timestamp: new Date(),
-                            });
-
-                            // Check if user is online
-                            const isOnline = this.isUserOnline(participantId);
-
-                            // Prepare notification content
-                            const notificationTitle = messageResult.data.sender.first_name || 'New Message';
-                            const notificationBody = content.length > 100 ?
-                                content.substring(0, 100) + '...' : content;
-
-                            if (!isOnline) {
-                                // Send push notification for offline users
-                                await this.notificationService.sendChatNotification(
-                                    senderId,
-                                    participantId,
-                                    conversationId,
-                                    notificationBody
-                                );
-                            }
-                            // else {
-                            //     // Send real-time notification for online users
-                            //     await this.sendRealtimeNotification(participantId, {
-                            //         type: 'chat',
-                            //         title: notificationTitle,
-                            //         body: notificationBody,
-                            //         data: {
-                            //             conversationId,
-                            //             senderId,
-                            //             messageId: messageResult.data._id,
-                            //         },
-                            //         actionUrl: `/message/${conversationId}`,
-                            //         priority: 'high'
-                            //     });
-                            // }
-
-                        }
-                    }
-                } else {
-                    socket.emit('message-failure', {
-                        success: false,
-                        error: 'Failed to save message',
-                        tempId: data.tempId
-                    });
-                }
-
+                await this.processAndBroadcastMessage(socket, data, senderId);
             } finally {
-                // Clean up duplicate prevention after 2 seconds
+                // Clean up duplicate prevention
                 setTimeout(() => {
                     this.processingMessages.delete(messageKey);
-                }, 2000);
+                }, this.MESSAGE_DUPLICATE_TIMEOUT);
             }
 
         } catch (error) {
             if (error.message !== "Duplicate message prevented") {
-                socket.emit('message-failure', {
-                    success: false,
-                    error: error.message || 'Internal server error',
-                    tempId: data.tempId
-                });
-                console.error('Error handling send message:', error);
+                console.error('❌ Error handling send message:', error);
+                this.emitMessageFailure(socket, data.tempId, error.message);
             }
-
         }
-    }
-
-    @SubscribeMessage('get-unread-count')
-    async handleGetUnreadCount(@ConnectedSocket() socket: Socket) {
-        if (!socket.data.authenticated) return;
-
-        const userId = socket.data.userId;
-        const unreadNotificationCount = await this.notificationService.getUnreadCount(userId.toString());
-        const unreadMsg = await this.messageService.getUnreadMessageCount(userId);
-
-        socket.emit('unread-count-update', {
-            count: unreadNotificationCount,
-            unreadMsgCount: unreadMsg.data,
-            timestamp: new Date(),
-        });
     }
 
     @SubscribeMessage('mark-read')
@@ -464,24 +306,19 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         @MessageBody() data: { messageId: string }
     ) {
         try {
-            if (!socket.data.authenticated) {
+            if (!this.isAuthenticated(socket)) {
                 return { event: 'mark-read', data: { success: false, error: 'Not authenticated' } };
             }
 
             const userId = socket.data.userId;
             const { messageId } = data;
 
-            const result = await this.messageService.markMessageAsRead(
-                messageId,
-                userId,
-            );
-
-            // Update last seen
+            const result = await this.messageService.markMessageAsRead(messageId, userId);
             this.updateUserLastSeen(socket.id);
 
             return { event: 'mark-read', data: result };
         } catch (error) {
-            console.error('Error marking message as read:', error);
+            console.error('❌ Error marking message as read:', error);
             return { event: 'mark-read', data: { success: false, error: error.message } };
         }
     }
@@ -492,14 +329,13 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         @MessageBody() data: { conversationId: string; isTyping: boolean }
     ) {
         try {
-            if (!socket.data.authenticated) {
+            if (!this.isAuthenticated(socket)) {
                 return { event: 'typing', data: { success: false, error: 'Not authenticated' } };
             }
 
             const { conversationId, isTyping } = data;
             const userId = socket.data.userId;
 
-            // Update last seen
             this.updateUserLastSeen(socket.id);
 
             if (isTyping) {
@@ -508,7 +344,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
                 this.removeFromTyping(conversationId, userId);
             }
 
-            // Broadcast typing status to the conversation room except the sender
+            // Broadcast typing status
             socket.to(`conversation:${conversationId}`).emit('user-typing', {
                 userId,
                 conversationId,
@@ -517,10 +353,12 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
 
             return { event: 'typing', data: { success: true } };
         } catch (error) {
-            console.error('Error handling typing:', error);
+            console.error('❌ Error handling typing:', error);
             return { event: 'typing', data: { success: false, error: error.message } };
         }
     }
+
+    // ============ USER STATUS & PRESENCE ============
 
     @SubscribeMessage('get-online-status')
     async handleGetOnlineStatus(
@@ -528,20 +366,14 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         @MessageBody() data: { userIds: string[]; conversationId?: string }
     ) {
         try {
-            if (!socket.data.authenticated) {
-                socket.emit('get-online-status', { success: false, error: 'Not authenticated' });
-                return;
+            if (!this.isAuthenticated(socket)) {
+                return this.emitError(socket, 'get-online-status', 'Not authenticated');
             }
 
             const { userIds, conversationId } = data;
 
-            // Get online status for requested users
-            const onlineStatus = userIds.reduce((acc, userId) => {
-                acc[userId] = this.isUserOnline(userId);
-                return acc;
-            }, {} as Record<string, boolean>);
-
-            // Get last seen info (you'd implement this with a database)
+            // Get online status
+            const onlineStatus = this.getOnlineStatusForUsers(userIds);
             const lastSeenInfo = await this.getLastSeenInfo(userIds);
 
             socket.emit('get-online-status', {
@@ -551,7 +383,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
                 timestamp: new Date()
             });
 
-            // If conversation provided, also get conversation-specific presence
+            // Get conversation presence if requested
             if (conversationId) {
                 const conversationPresence = await this.getConversationPresence(conversationId);
                 socket.emit('conversation-presence', {
@@ -562,8 +394,8 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
             }
 
         } catch (error) {
-            console.error('Error getting online status:', error);
-            socket.emit('get-online-status', { success: false, error: error.message });
+            console.error('❌ Error getting online status:', error);
+            this.emitError(socket, 'get-online-status', error.message);
         }
     }
 
@@ -573,14 +405,13 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         @MessageBody() data: { userIds: string[] }
     ) {
         try {
-            if (!socket.data.authenticated) {
-                socket.emit('subscribe-user-status', { success: false, error: 'Not authenticated' });
-                return;
+            if (!this.isAuthenticated(socket)) {
+                return this.emitError(socket, 'subscribe-user-status', 'Not authenticated');
             }
 
             const { userIds } = data;
 
-            // Join rooms for status updates of specific users
+            // Join status update rooms
             userIds.forEach(userId => {
                 socket.join(`status-updates:${userId}`);
             });
@@ -592,51 +423,48 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
             });
 
         } catch (error) {
-            console.error('Error subscribing to user status:', error);
-            socket.emit('subscribe-user-status', { success: false, error: error.message });
+            console.error('❌ Error subscribing to user status:', error);
+            this.emitError(socket, 'subscribe-user-status', error.message);
         }
     }
 
-    // Heartbeat to update last seen
     @SubscribeMessage('heartbeat')
     async handleHeartbeat(@ConnectedSocket() socket: Socket) {
-        if (socket.data.authenticated) {
-            const userId = socket.data.userId;
-
-            // Update in-memory
-            this.updateUserLastSeen(socket.id);
-
-            // Periodically update database (every 10th heartbeat to reduce DB writes)
-            if (!socket.data.heartbeatCount) {
-                socket.data.heartbeatCount = 0;
-            }
-            socket.data.heartbeatCount++;
-
-            if (socket.data.heartbeatCount % 10 === 0) {
-                await this.userModel.findByIdAndUpdate(userId, {
-                    lastSeen: new Date(),
-                    isOnline: true
-                });
-            }
-
-            socket.emit('heartbeat-ack', { timestamp: new Date() });
+        if (!this.isAuthenticated(socket)) {
+            return;
         }
+
+        const userId = socket.data.userId;
+        this.updateUserLastSeen(socket.id);
+
+        // Periodically update database
+        if (!socket.data.heartbeatCount) {
+            socket.data.heartbeatCount = 0;
+        }
+        socket.data.heartbeatCount++;
+
+        if (socket.data.heartbeatCount % this.HEARTBEAT_DB_UPDATE_INTERVAL === 0) {
+            await this.userModel.findByIdAndUpdate(userId, {
+                lastSeen: new Date(),
+                isOnline: true
+            }).catch(err => console.error('Error updating heartbeat in DB:', err));
+        }
+
+        socket.emit('heartbeat-ack', { timestamp: new Date() });
     }
 
-
-    // ============ NOTIFICATION-SPECIFIC SOCKET EVENTS ============
+    // ============ NOTIFICATION EVENTS ============
 
     @SubscribeMessage('join-notifications')
     async handleJoinNotifications(@ConnectedSocket() socket: Socket) {
-        if (!socket.data.authenticated) {
-            socket.emit('join-notifications', { success: false, error: 'Not authenticated' });
-            return;
+        if (!this.isAuthenticated(socket)) {
+            return this.emitError(socket, 'join-notifications', 'Not authenticated');
         }
 
         const userId = socket.data.userId;
         socket.join(`notifications:${userId}`);
 
-        // Send current unread count
+        // Send current counts
         const unreadCount = await this.notificationService.getUnreadCount(userId);
         const unreadMsg = await this.messageService.getUnreadMessageCount(userId);
 
@@ -658,9 +486,8 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         @ConnectedSocket() socket: Socket,
         @MessageBody() data: { page?: number; limit?: number; type?: string }
     ) {
-        if (!socket.data.authenticated) {
-            socket.emit('get-notifications', { success: false, error: 'Not authenticated' });
-            return;
+        if (!this.isAuthenticated(socket)) {
+            return this.emitError(socket, 'get-notifications', 'Not authenticated');
         }
 
         const userId = socket.data.userId;
@@ -675,10 +502,235 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
 
             socket.emit('get-notifications', notifications);
         } catch (error) {
-            socket.emit('get-notifications', {
-                success: false,
-                error: error.message
+            console.error('❌ Error getting notifications:', error);
+            this.emitError(socket, 'get-notifications', error.message);
+        }
+    }
+
+    @SubscribeMessage('get-unread-count')
+    async handleGetUnreadCount(@ConnectedSocket() socket: Socket) {
+        if (!this.isAuthenticated(socket)) return;
+
+        const userId = socket.data.userId;
+        const unreadNotificationCount = await this.notificationService.getUnreadCount(userId.toString());
+        const unreadMsg = await this.messageService.getUnreadMessageCount(userId);
+
+        socket.emit('unread-count-update', {
+            count: unreadNotificationCount,
+            unreadMsgCount: unreadMsg.data,
+            timestamp: new Date(),
+        });
+    }
+
+    // ============ PRIVATE HELPER METHODS ============
+
+    private extractToken(socket: Socket): string | null {
+        return socket.handshake.auth.token ||
+            socket.handshake.headers.authorization?.split(' ')[1] ||
+            socket.handshake.query.token as string ||
+            null;
+    }
+
+    private async verifyTokenAndGetUserId(token: string): Promise<string | null> {
+        try {
+            const payload = this.jwtService.verify(token);
+            const userId = payload.sub || payload.id || payload._id;
+            return userId ? userId.toString() : null;
+        } catch (error) {
+            console.error('JWT verification failed:', error);
+            return null;
+        }
+    }
+
+    private handleAuthError(socket: Socket, message: string) {
+        console.log(`⚠️ Auth error for socket ${socket.id}: ${message}`);
+        socket.emit('auth_error', { message });
+        socket.disconnect();
+    }
+
+    private async registerConnection(socket: Socket, userId: string) {
+        // Track multiple connections per user
+        if (!this.userSockets.has(userId)) {
+            this.userSockets.set(userId, new Set());
+        }
+        this.userSockets.get(userId).add(socket.id);
+
+        // Store connection info
+        this.connectedUsers.set(socket.id, {
+            userId,
+            socketId: socket.id,
+            joinedAt: new Date(),
+            lastSeen: new Date()
+        });
+
+        // Setup socket data
+        socket.data.userId = userId;
+        socket.data.authenticated = true;
+
+        // Join personal rooms
+        socket.join(`user:${userId}`);
+        socket.join(`notifications:${userId}`);
+
+        // Update user online status
+        await this.userModel.findByIdAndUpdate(userId, {
+            isOnline: true,
+            lastSeen: new Date()
+        }).catch(err => console.error('Error updating user online status:', err));
+
+        // Broadcast online status
+        this.debouncedStatusBroadcast(userId, true);
+
+        // Send connection success with unread counts
+        const [unreadNotificationCount, unreadMsg] = await Promise.all([
+            this.notificationService.getUnreadCount(userId),
+            this.messageService.getUnreadMessageCount(userId)
+        ]);
+
+        socket.emit('connection_success', {
+            message: 'Successfully connected',
+            userId,
+        });
+
+        socket.emit('unread-count-update', {
+            count: unreadNotificationCount,
+            unreadMsgCount: unreadMsg.data,
+            timestamp: new Date(),
+        });
+    }
+
+    private async unregisterConnection(socketId: string, userId: string) {
+        // Remove from connected users
+        this.connectedUsers.delete(socketId);
+
+        // Remove from user's socket set
+        const userSocketSet = this.userSockets.get(userId);
+        if (userSocketSet) {
+            userSocketSet.delete(socketId);
+
+            // If no more connections, user is offline
+            if (userSocketSet.size === 0) {
+                this.userSockets.delete(userId);
+
+                // Update database
+                await this.updateUserLastSeenInDB(userId);
+
+                // Clean up and broadcast offline status
+                this.removeFromAllTyping(userId);
+                this.debouncedStatusBroadcast(userId, false);
+            }
+
+            console.log(`✅ User ${userId} disconnected. Remaining connections: ${userSocketSet.size}`);
+        }
+    }
+
+    private async processAndBroadcastMessage(socket: Socket, data: any, senderId: string) {
+        const { conversationId, content, attachments, tempId } = data;
+
+        // Save message to database
+        const messageResult = await this.messageService.sendMessage({
+            senderId,
+            conversationId,
+            content: content.trim(),
+            attachments: attachments || []
+        });
+
+        if (!messageResult.success || !messageResult.data) {
+            this.emitMessageFailure(socket, tempId, 'Failed to save message');
+            return;
+        }
+
+        console.log(`✅ Message sent successfully in conversation ${conversationId}`);
+
+        // Emit success to sender
+        socket.emit('send-message', {
+            success: true,
+            message: messageResult.data,
+            tempId
+        });
+
+        // Broadcast to other participants in the conversation
+        this.server.to(`conversation:${conversationId}`)
+            .except(socket.id)
+            .emit('new-message', {
+                message: messageResult.data,
+                conversationId,
             });
+
+        // Handle notifications
+        await this.sendMessageNotifications(conversationId, senderId, content, messageResult.data);
+    }
+
+    private async sendMessageNotifications(conversationId: string, senderId: string, content: string, messageData: any) {
+        try {
+            const conversation = await this.conversationModel
+                .findById(conversationId)
+                .populate('participants', 'first_name last_name avatar fcmToken');
+
+            if (!conversation) return;
+
+            const otherParticipants = conversation.participants.filter(
+                (participant: any) => participant._id.toString() !== senderId
+            );
+
+            for (const participant of otherParticipants) {
+                const participantId = participant._id.toString();
+
+                // Get unread counts
+                const [unreadNotificationCount, unreadData] = await Promise.all([
+                    this.notificationService.getUnreadCount(participantId),
+                    this.messageService.getUnreadMessageCount(participantId)
+                ]);
+
+                // Emit unread count update
+                this.server.to(`user:${participantId}`).emit('unread-count-update', {
+                    count: unreadNotificationCount,
+                    unreadMsgCount: unreadData.data,
+                    timestamp: new Date(),
+                });
+
+                // Send push notification if user is offline
+                const isOnline = this.isUserOnline(participantId);
+                if (!isOnline) {
+                    const notificationBody = content.length > 100 ?
+                        content.substring(0, 100) + '...' : content;
+
+                    await this.notificationService.sendChatNotification(
+                        senderId,
+                        participantId,
+                        conversationId,
+                        notificationBody
+                    ).catch(err => console.error('Error sending chat notification:', err));
+                }
+            }
+        } catch (error) {
+            console.error('❌ Error sending message notifications:', error);
+        }
+    }
+
+    private isAuthenticated(socket: Socket): boolean {
+        return socket.data.authenticated === true;
+    }
+
+    private isUserInConversation(conversation: any, userId: string): boolean {
+        return conversation.participants.some((p: any) => p.toString() === userId);
+    }
+
+    private emitError(socket: Socket, event: string, error: string) {
+        socket.emit(event, { success: false, error });
+    }
+
+    private emitMessageFailure(socket: Socket, tempId: string | undefined, error: string) {
+        socket.emit('message-failure', {
+            success: false,
+            error,
+            tempId
+        });
+    }
+
+    private updateUserLastSeen(socketId: string) {
+        const user = this.connectedUsers.get(socketId);
+        if (user) {
+            user.lastSeen = new Date();
         }
     }
 
@@ -690,14 +742,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
             });
             console.log(`✅ Updated last seen for user ${userId}`);
         } catch (error) {
-            console.error('Error updating last seen in DB:', error);
-        }
-    }
-
-    private updateUserLastSeen(socketId: string) {
-        const user = this.connectedUsers.get(socketId);
-        if (user) {
-            user.lastSeen = new Date();
+            console.error('❌ Error updating last seen in DB:', error);
         }
     }
 
@@ -737,8 +782,8 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         }
     }
 
-    private debouncedStatusBroadcast(userId: string, isOnline: boolean, delay: number = 1000) {
-        // Clear existing timeout for this user
+    private debouncedStatusBroadcast(userId: string, isOnline: boolean) {
+        // Clear existing timeout
         const existingTimeout = this.statusBroadcastQueue.get(userId);
         if (existingTimeout) {
             clearTimeout(existingTimeout);
@@ -748,27 +793,32 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         const timeout = setTimeout(() => {
             this.broadcastUserStatus(userId, isOnline);
             this.statusBroadcastQueue.delete(userId);
-        }, delay);
+        }, this.STATUS_BROADCAST_DEBOUNCE);
 
         this.statusBroadcastQueue.set(userId, timeout);
     }
 
     private broadcastUserStatus(userId: string, isOnline: boolean) {
-        // Broadcast to subscribers of this user's status
         this.server.to(`status-updates:${userId}`).emit('user-status-change', {
             userId,
             isOnline,
             timestamp: new Date()
         });
 
-        console.log(`Broadcasted status change: User ${userId} is ${isOnline ? 'online' : 'offline'}`);
+        console.log(`📡 Broadcasted: User ${userId} is ${isOnline ? 'online' : 'offline'}`);
+    }
+
+    private getOnlineStatusForUsers(userIds: string[]): Record<string, boolean> {
+        return userIds.reduce((acc, userId) => {
+            acc[userId] = this.isUserOnline(userId);
+            return acc;
+        }, {} as Record<string, boolean>);
     }
 
     private async getLastSeenInfo(userIds: string[]): Promise<Record<string, Date | null>> {
         const lastSeenInfo: Record<string, Date | null> = {};
 
         try {
-            // Fetch from database
             const users = await this.userModel
                 .find({ _id: { $in: userIds } })
                 .select('_id lastSeen isOnline');
@@ -778,7 +828,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
                 const userSocketSet = this.userSockets.get(userId);
 
                 if (userSocketSet && userSocketSet.size > 0) {
-                    // User is currently online, get their in-memory last seen
+                    // User is online, get in-memory last seen
                     const socketId = Array.from(userSocketSet)[0];
                     const connectedUser = this.connectedUsers.get(socketId);
                     lastSeenInfo[userId] = connectedUser?.lastSeen || new Date();
@@ -788,7 +838,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
                 }
             });
 
-            // Fill in any missing users
+            // Fill missing users
             userIds.forEach(userId => {
                 if (!lastSeenInfo[userId]) {
                     lastSeenInfo[userId] = null;
@@ -796,8 +846,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
             });
 
         } catch (error) {
-            console.error('Error fetching last seen info:', error);
-            // Return nulls on error
+            console.error('❌ Error fetching last seen info:', error);
             userIds.forEach(userId => {
                 lastSeenInfo[userId] = null;
             });
@@ -807,33 +856,158 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     }
 
     private async getConversationPresence(conversationId: string): Promise<Record<string, boolean>> {
-        // Get all participants in the conversation
-        const conversation = await this.conversationModel.findById(conversationId).populate('participants');
-        if (!conversation) return {};
+        try {
+            const conversation = await this.conversationModel
+                .findById(conversationId)
+                .populate('participants');
 
-        const presence: Record<string, boolean> = {};
-        conversation.participants.forEach((participant: any) => {
-            const userId = participant._id.toString();
-            presence[userId] = this.isUserOnline(userId);
-        });
+            if (!conversation) return {};
 
-        return presence;
-    }
-
-    // Public method to notify users (can be called from other services)
-    async notifyUserOfNewMessages(userId: string, unreadCount: number) {
-        const userConnection = Array.from(this.connectedUsers.values())
-            .find(user => user.userId === userId);
-
-        if (userConnection) {
-            this.server.to(`user:${userId}`).emit('unread-count-update', {
-                count: unreadCount,
-                timestamp: new Date()
+            const presence: Record<string, boolean> = {};
+            conversation.participants.forEach((participant: any) => {
+                const userId = participant._id.toString();
+                presence[userId] = this.isUserOnline(userId);
             });
+
+            return presence;
+        } catch (error) {
+            console.error('❌ Error getting conversation presence:', error);
+            return {};
         }
     }
 
-    // Get connected users count
+    // ============ CLEANUP METHODS ============
+
+    private startCleanupInterval() {
+        if (this.cleanupInterval) {
+            clearInterval(this.cleanupInterval);
+        }
+
+        this.cleanupInterval = setInterval(() => {
+            this.cleanupStaleConnections();
+        }, this.CLEANUP_INTERVAL);
+
+        console.log(`🧹 Cleanup interval started: checking every ${this.CLEANUP_INTERVAL / 1000}s`);
+    }
+
+    private async cleanupStaleConnections() {
+        try {
+            if (!this.server?.sockets?.sockets) {
+                console.log('⚠️ Server not initialized or already destroyed.');
+                return;
+            }
+
+            const now = new Date();
+            const staleConnections: string[] = [];
+
+            // Collect stale connections
+            for (const [socketId, user] of this.connectedUsers.entries()) {
+                const timeSinceLastSeen = now.getTime() - user.lastSeen.getTime();
+
+                if (timeSinceLastSeen > this.STALE_THRESHOLD) {
+                    staleConnections.push(socketId);
+                }
+            }
+
+            if (staleConnections.length === 0) {
+                console.log('✅ No stale connections found');
+                this.cleanupStats.lastRun = now;
+                return;
+            }
+
+            console.log(`🧹 Cleaning up ${staleConnections.length} stale connection(s)`);
+
+            // Process each stale connection
+            let cleanedCount = 0;
+            for (const socketId of staleConnections) {
+                const success = await this.cleanupSingleConnection(socketId);
+                if (success) cleanedCount++;
+            }
+
+            // Update stats
+            this.cleanupStats.lastRun = now;
+            this.cleanupStats.totalCleaned += cleanedCount;
+
+            console.log(`✅ Cleanup completed: ${cleanedCount}/${staleConnections.length} connection(s) removed`);
+
+        } catch (error) {
+            console.error('❌ Error during cleanup:', error);
+            this.cleanupStats.errors++;
+        }
+    }
+
+    private async cleanupSingleConnection(socketId: string): Promise<boolean> {
+        try {
+            const user = this.connectedUsers.get(socketId);
+            if (!user) return false;
+
+            const userId = user.userId;
+
+            console.log(`🧹 Cleaning up stale connection: user ${userId}, socket ${socketId}`);
+
+            // 1. Disconnect socket if it still exists
+            const socket = this.server.sockets.sockets.get(socketId);
+            if (socket) {
+                socket.disconnect(true);
+            }
+
+            // 2. Remove from connected users
+            this.connectedUsers.delete(socketId);
+
+            // 3. Update userSockets map
+            const userSocketSet = this.userSockets.get(userId);
+            if (userSocketSet) {
+                userSocketSet.delete(socketId);
+
+                // If user has no more connections, handle offline status
+                if (userSocketSet.size === 0) {
+                    this.userSockets.delete(userId);
+
+                    // Update database
+                    await this.updateUserLastSeenInDB(userId);
+
+                    // Broadcast offline status
+                    this.debouncedStatusBroadcast(userId, false);
+                }
+            }
+
+            // 4. Remove from typing indicators
+            this.removeFromAllTyping(userId);
+
+            return true;
+
+        } catch (error) {
+            console.error(`❌ Error cleaning up socket ${socketId}:`, error);
+            return false;
+        }
+    }
+
+    private clearAllPendingTimeouts() {
+        // Clear status broadcast timeouts
+        for (const timeout of this.statusBroadcastQueue.values()) {
+            clearTimeout(timeout);
+        }
+        this.statusBroadcastQueue.clear();
+
+        console.log('✅ Cleared all pending timeouts');
+    }
+
+    private async disconnectAllClients() {
+        if (!this.server?.sockets?.sockets) {
+            return;
+        }
+
+        const sockets = Array.from(this.server.sockets.sockets.values());
+
+        for (const socket of sockets) {
+            socket.disconnect(true);
+        }
+
+        console.log(`✅ Disconnected ${sockets.length} socket(s)`);
+    }
+
+    // ============ PUBLIC API METHODS ============
+
     public isUserOnline(userId: string): boolean {
         const userSocketSet = this.userSockets.get(userId);
         return userSocketSet ? userSocketSet.size > 0 : false;
@@ -856,84 +1030,73 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         return this.userSockets.size;
     }
 
-    // Method to be called from other services
+    public getCleanupStats(): CleanupStats {
+        return { ...this.cleanupStats };
+    }
+
+    public async notifyUserOfNewMessages(userId: string, unreadCount: number) {
+        if (this.isUserOnline(userId)) {
+            this.server.to(`user:${userId}`).emit('unread-count-update', {
+                count: unreadCount,
+                timestamp: new Date()
+            });
+        }
+    }
+
     public async notifyUserStatusChange(userId: string, isOnline: boolean) {
         this.broadcastUserStatus(userId, isOnline);
     }
 
-    // Cleanup method
-    private cleanupStaleConnections() {
+    // ============ NOTIFICATION API METHODS ============
 
-        if (!this.server?.sockets?.sockets) {
-            console.log('Server not initialized or already destroyed.');
-            return;
-        }
-
-        const now = new Date();
-        const staleThreshold = 10 * 60 * 1000; // 10 minutes
-
-        for (const [socketId, user] of this.connectedUsers.entries()) {
-            if (now.getTime() - user.lastSeen.getTime() > staleThreshold) {
-                console.log(`Cleaning up stale connection for user ${user.userId}, socket ${socketId}`);
-
-                const socket = this.server.sockets.sockets.get(socketId);
-                if (!socket) {
-                    console.log(`Socket ${socketId} not found during cleanup`);
-                    return;
-                }
-                if (socket) {
-                    socket.disconnect();
-                }
-
-                this.connectedUsers.delete(socketId);
-                this.removeFromAllTyping(user.userId);
-            }
-        }
-    }
-
-
-    // ============ NOTIFICATION HELPER METHODS ============
-
-    // Send real-time notification to online users
     public async sendRealtimeNotification(userId: string, notificationData: any): Promise<boolean> {
         const userSocketSet = this.userSockets.get(userId);
-        if (userSocketSet && userSocketSet.size > 0) {
-            // Create notification in database first
+        if (!userSocketSet || userSocketSet.size === 0) {
+            return false;
+        }
+
+        try {
+            // Create notification in database
             const notification = await this.notificationService.sendNotification({
                 recipient: userId,
                 title: notificationData.title,
                 body: notificationData.body,
                 type: notificationData.type,
-                priority: notificationData.priority,
+                priority: notificationData.priority || 'normal',
                 data: notificationData.data,
                 actionUrl: notificationData.actionUrl,
-                sendPush: false, // Don't send push for online users
+                sendPush: false,
             });
 
-            if (notification.success) {
-                // Send to all user's connected sockets
-                this.server.to(`user:${userId}`).emit('new-notification', {
-                    notification: notification.data,
-                    timestamp: new Date(),
-                });
-
-                // Also send unread count update
-                const unreadCount = await this.notificationService.getUnreadCount(userId);
-                const unreadMsg = await this.messageService.getUnreadMessageCount(userId);
-
-                this.server.to(`user:${userId}`).emit('unread-count-update', {
-                    count: unreadCount,
-                    unreadMsgCount: unreadMsg.data,
-                    timestamp: new Date(),
-                });
-
-                return true;
+            if (!notification.success) {
+                return false;
             }
+
+            // Send to all user's connected sockets
+            this.server.to(`user:${userId}`).emit('new-notification', {
+                notification: notification.data,
+                timestamp: new Date(),
+            });
+
+            // Send unread count update
+            const [unreadCount, unreadMsg] = await Promise.all([
+                this.notificationService.getUnreadCount(userId),
+                this.messageService.getUnreadMessageCount(userId)
+            ]);
+
+            this.server.to(`user:${userId}`).emit('unread-count-update', {
+                count: unreadCount,
+                unreadMsgCount: unreadMsg.data,
+                timestamp: new Date(),
+            });
+
+            return true;
+        } catch (error) {
+            console.error('❌ Error sending realtime notification:', error);
+            return false;
         }
-        return false;
     }
 
-    // Send notification to user (will determine if push or real-time)
     public async sendNotificationToUser(
         userId: string,
         title: string,
@@ -971,12 +1134,11 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
                 return notification.success;
             }
         } catch (error) {
-            console.error('Error sending notification to user:', error);
+            console.error('❌ Error sending notification to user:', error);
             return false;
         }
     }
 
-    // Broadcast notification to multiple users
     public async broadcastNotification(
         userIds: string[],
         title: string,
@@ -998,16 +1160,18 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         });
 
         // Send real-time notifications to online users
-        for (const userId of onlineUsers) {
-            await this.sendRealtimeNotification(userId, {
+        const onlinePromises = onlineUsers.map(userId =>
+            this.sendRealtimeNotification(userId, {
                 title,
                 body,
                 type,
                 data,
                 priority: options?.priority || 'normal',
                 actionUrl: options?.actionUrl,
-            });
-        }
+            })
+        );
+
+        await Promise.allSettled(onlinePromises);
 
         // Send push notifications to offline users
         if (offlineUsers.length > 0) {
@@ -1019,14 +1183,19 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
                 data,
                 actionUrl: options?.actionUrl,
                 sendPush: true,
-            });
+            }).catch(err => console.error('Error sending bulk notifications:', err));
         }
     }
 
     // ============ PREDEFINED NOTIFICATION METHODS ============
 
-    public async sendBookingNotification(userId: string, bookingId: string, status: string, details?: any): Promise<boolean> {
-        const statusMessages = {
+    public async sendBookingNotification(
+        userId: string,
+        bookingId: string,
+        status: string,
+        details?: any
+    ): Promise<boolean> {
+        const statusMessages: Record<string, string> = {
             confirmed: 'Your booking has been confirmed!',
             cancelled: 'Your booking has been cancelled.',
             completed: 'Your booking has been completed.',
@@ -1046,8 +1215,13 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         );
     }
 
-    public async sendOrderNotification(userId: string, orderId: string, status: string, details?: any): Promise<boolean> {
-        const statusMessages = {
+    public async sendOrderNotification(
+        userId: string,
+        orderId: string,
+        status: string,
+        details?: any
+    ): Promise<boolean> {
+        const statusMessages: Record<string, string> = {
             placed: 'Your order has been placed successfully!',
             confirmed: 'Your order has been confirmed.',
             processing: 'Your order is being processed.',
@@ -1069,7 +1243,11 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         );
     }
 
-    public async sendFriendRequestNotification(fromUserId: string, toUserId: string, fromUserName: string): Promise<boolean> {
+    public async sendFriendRequestNotification(
+        fromUserId: string,
+        toUserId: string,
+        fromUserName: string
+    ): Promise<boolean> {
         return await this.sendNotificationToUser(
             toUserId,
             'New Friend Request',
@@ -1083,7 +1261,11 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         );
     }
 
-    public async sendFollowNotification(fromUserId: string, toUserId: string, fromUserName: string): Promise<boolean> {
+    public async sendFollowNotification(
+        fromUserId: string,
+        toUserId: string,
+        fromUserName: string
+    ): Promise<boolean> {
         return await this.sendNotificationToUser(
             toUserId,
             'New Follower',
@@ -1097,12 +1279,17 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         );
     }
 
-    public async sendPaymentNotification(userId: string, paymentId: string, amount: number, status: string): Promise<boolean> {
-        const statusMessages = {
-            successful: `Payment of $${amount} was successful`,
-            failed: `Payment of $${amount} failed`,
-            pending: `Payment of $${amount} is pending`,
-            refunded: `Refund of $${amount} has been processed`,
+    public async sendPaymentNotification(
+        userId: string,
+        paymentId: string,
+        amount: number,
+        status: string
+    ): Promise<boolean> {
+        const statusMessages: Record<string, string> = {
+            successful: `Payment of ${amount} was successful`,
+            failed: `Payment of ${amount} failed`,
+            pending: `Payment of ${amount} is pending`,
+            refunded: `Refund of ${amount} has been processed`,
         };
 
         return await this.sendNotificationToUser(
@@ -1117,5 +1304,4 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
             }
         );
     }
-
 }
