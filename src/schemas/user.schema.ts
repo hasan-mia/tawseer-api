@@ -34,8 +34,11 @@ export class User extends Document {
   @Prop()
   cover: string;
 
-  @Prop()
-  otp: number;
+  @Prop({ type: Number, default: null })
+  otp: number | null;
+
+  @Prop({ type: Date, default: null })
+  otp_expiry: Date | null;
 
   @Prop()
   bio: string;
@@ -123,7 +126,6 @@ export class User extends Document {
 
   @Prop({ type: Boolean, default: false })
   isOnline: boolean;
-
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

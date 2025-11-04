@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Patch,
   Post,
   Request,
   UseGuards
@@ -43,17 +44,42 @@ export class AppointmentController {
     return this.appointmentService.getAllAppointmentByUser(req);
   }
 
-  // ======== Get all appointment by salon ID ========
+  // ======== Get all appointment by Vendor ID ========
   @Get(':id')
   @HttpCode(HttpStatus.OK)
-  async getAllAppointmentBySalon(@Request() req) {
-    return this.appointmentService.getAllAppointmentBySalon(req);
+  async getAllAppointmentByVendor(@Request() req) {
+    return this.appointmentService.getAllAppointmentByVendor(req);
   }
 
-  // ======== Get confirm appointment by salon ID ========
-  @Get(':id')
-  @HttpCode(HttpStatus.OK)
-  async getConfirmAppointmentBySalon(@Request() req) {
-    return this.appointmentService.getConfirmAppointmentBySalon(req);
+  // Start appointment (Vendor action)
+  @Patch('start/:id')
+  @UseGuards(JwtAuthGuard)
+  async startAppointment(@Request() req) {
+    return this.appointmentService.startAppointment(
+      req.user.id,
+      req.params.id,
+    );
   }
+
+  // Complete appointment (Vendor action)
+  @Patch('complete/:id')
+  @UseGuards(JwtAuthGuard)
+  async completeAppointment(@Request() req) {
+    return this.appointmentService.completeAppointment(
+      req.user.id,
+      req.params.id,
+    );
+  }
+
+  // Cancel appointment (Customer action)
+  @Patch('cancel/:id')
+  @UseGuards(JwtAuthGuard)
+  async cancelAppointment(@Request() req) {
+    return this.appointmentService.cancelAppointment(
+      req.user.id,
+      req.params.id,
+    );
+  }
+
 }
+

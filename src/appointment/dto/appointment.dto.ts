@@ -36,4 +36,10 @@ export class AppointmentDto {
   @IsOptional()
   readonly discount?: number;
 
+  @IsOptional()
+  readonly status?: string;
+
+  @IsOptional()
+  readonly payment_status: string;
+
 }

@@ -18,6 +18,7 @@ import { PostModule } from './post/post.module';
 import { CommentModule } from './postcomment/comment.module';
 import { ReplyModule } from './postreply/reply.module';
 import { ProductModule } from './product/product.module';
+import { QueueModule } from './queueManagement/queue.module';
 import { RedisCacheService } from './rediscloud.service';
 import { ReviewModule } from './review/review.module';
 import { ServiceModule } from './service/service.module';
@@ -63,6 +64,7 @@ import { VendorModule } from './vendor/vendor.module';
     ProductModule,
     MessageModule,
     NotificationModule,
+    QueueModule,
   ],
   controllers: [AppController],
   providers: [AppService, RedisCacheService],

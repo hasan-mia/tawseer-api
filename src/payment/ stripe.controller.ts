@@ -1,5 +1,7 @@
+import { QueueManagementService } from '@/queueManagement/queue.service';
 import { Appointment } from '@/schemas/appointment.schema';
 import { Transaction } from '@/schemas/transaction.schema';
+import { QueueGateway } from '@/socket/queue.gateway';
 import {
   Controller,
   Headers,
@@ -22,6 +24,8 @@ export class StripeController {
     private appointmentModel: Model<Appointment>,
     @InjectModel(Transaction.name)
     private transactionModel: Model<Transaction>,
+    private readonly queueService: QueueManagementService,
+    private readonly queueGateway: QueueGateway,
   ) {
     this.stripe = new Stripe(process.env.STRIPE_API_SECRET_KEY, {
       apiVersion: '2025-02-24.acacia',
@@ -51,19 +55,45 @@ export class StripeController {
       const paymentIntent = event.data.object as Stripe.PaymentIntent;
       const appointmentId = paymentIntent.metadata.appointmentId;
 
-      // Update Appointment
-      await this.appointmentModel.findByIdAndUpdate(appointmentId, {
-        status: 'confirm',
-        payment_status: "success"
-      },
-        { new: true }
-      );
+      try {
+        await this.appointmentModel.findByIdAndUpdate(
+          appointmentId,
+          {
+            status: 'confirm',
+            payment_status: 'success'
+          },
+          { new: true }
+        );
 
-      await this.transactionModel.findOneAndUpdate(
-        { referenceId: new Types.ObjectId(appointmentId) },
-        { status: "success" },
-        { new: true },
-      );
+        await this.transactionModel.findOneAndUpdate(
+          { referenceId: new Types.ObjectId(appointmentId) },
+          { status: 'success' },
+          { new: true },
+        );
+
+        // Update queue based on payment
+        await this.queueService.updateQueueOnPayment(appointmentId);
+
+        // Get appointment details for broadcasting
+        const appointment = await this.appointmentModel
+          .findById(appointmentId)
+          .lean();
+
+        if (appointment) {
+          await this.queueGateway.notifyPaymentUpdate(
+            appointment.user.toString(),
+            appointment.vendor.toString(),
+            appointmentId,
+          );
+
+          await this.queueGateway.broadcastQueueUpdate(
+            appointment.vendor.toString()
+          );
+
+        }
+      } catch (error) {
+        console.error('Error processing payment webhook:', error);
+      }
     }
 
     res.json({ received: true });

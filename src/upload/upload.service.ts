@@ -1,7 +1,8 @@
-/* eslint-disable prettier/prettier */
 import { CloudinaryService } from '@/cloudinary/cloudinary.service';
 import { getPublicIdFromUrl } from '@/helpers/myHelper.helper';
+import { RedisCacheService } from '@/rediscloud.service';
 import { Photo } from '@/schemas/photo.schema';
+import { User } from '@/schemas/user.schema';
 import { Video } from '@/schemas/video.schema';
 import {
   BadRequestException,
@@ -11,8 +12,6 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { isValidObjectId, Model } from 'mongoose';
-import { RedisCacheService } from '../rediscloud.service';
-import { User } from '../schemas/user.schema';
 
 @Injectable()
 export class UploadService {

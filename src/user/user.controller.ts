@@ -16,14 +16,14 @@ import { Roles } from '@/auth/roles.decorator';
 import { UserDto } from './dto/user.dto';
 import { UserService } from './user.service';
 
-@Controller('users')
+@Controller('user')
 export class UserController {
   constructor(
     private userService: UserService,
   ) { }
 
   // ======== Update User Profile ========
-  @Put('')
+  @Put('update')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.ACCEPTED)
   async updateProfile(
@@ -35,13 +35,13 @@ export class UserController {
   }
 
   // ======== Get All User ========
-  @Get('')
+  @Get('all')
   @HttpCode(HttpStatus.OK)
   async allUser(@Request() req) {
     return this.userService.allUser(req);
   }
 
-  // ======== Get user info by ID ========
+  // ======== Get user info by ID public========
   @Get(':id')
   @HttpCode(HttpStatus.OK)
   async getUserInfo(@Param('id') id: string) {

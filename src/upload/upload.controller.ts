@@ -1,4 +1,3 @@
-/* eslint-disable prettier/prettier */
 import {
   Controller,
   Delete,
@@ -27,7 +26,7 @@ export class UploadController {
   ) { }
 
   // ========Single image upload ========
-  @Post('image-upload')
+  @Post('image')
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
   @UseInterceptors(FileInterceptor('image'))
@@ -41,7 +40,7 @@ export class UploadController {
   }
 
   //========= Multiple image upload ==========//
-  @Post('images-upload')
+  @Post('images')
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
   @UseInterceptors(FileFieldsInterceptor([{ name: 'images', maxCount: 5 }]))
@@ -67,7 +66,7 @@ export class UploadController {
   }
 
   // ======== Multiple image upload by name========
-  @Post('multiple-upload')
+  @Post('images-by-name')
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
   @UseInterceptors(
@@ -110,7 +109,7 @@ export class UploadController {
   }
 
   // Upload video
-  @Post('video-upload')
+  @Post('video')
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
   @UseInterceptors(FileFieldsInterceptor([{ name: 'video', maxCount: 1 }]))

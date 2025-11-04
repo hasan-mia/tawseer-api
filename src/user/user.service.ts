@@ -1,9 +1,9 @@
+import { RedisCacheService } from '@/rediscloud.service';
+import { User } from '@/schemas/user.schema';
 import { Vendor } from '@/schemas/vendor.schema';
 import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { RedisCacheService } from '../rediscloud.service';
-import { User } from '../schemas/user.schema';
 import { UserDto } from './dto/user.dto';
 
 @Injectable()
@@ -47,11 +47,6 @@ export class UserService {
 
       const updatedUser = await this.userModel.findByIdAndUpdate(id, updatedUserData, { new: true, upsert: true });
 
-      // remove caching
-      await this.redisCacheService.del('getAllUser');
-      await this.redisCacheService.del(`myInfo${user._id}`);
-      await this.redisCacheService.del(`userInfo${user._id}`);
-
       const result = {
         success: true,
         message: 'Update successfully',
@@ -79,11 +74,6 @@ export class UserService {
         .updateOne({ _id: id }, { is_verified: data.is_verified })
         .exec();
 
-      // remove caching
-      await this.redisCacheService.del('getAllUser');
-      await this.redisCacheService.del(`myInfo${user._id}`);
-      await this.redisCacheService.del(`userInfo${user._id}`);
-
 
       const result = {
         success: true,
@@ -104,11 +94,6 @@ export class UserService {
   // ======== Get All User by admin ========
   async allUser(req: any) {
     try {
-      const cacheKey = `getAllUser:${JSON.stringify(req.query)}`;
-      const cacheData = await this.redisCacheService.get(cacheKey);
-      if (cacheData) {
-        return cacheData;
-      }
 
       const { keyword, gender, role, is_disabled, is_deleted, limit, page } = req.query;
 
@@ -186,9 +171,6 @@ export class UserService {
         nextUrl,
       };
 
-      // Store in cache
-      await this.redisCacheService.set(cacheKey, data, 60);
-
       return data;
     } catch (error) {
       if (error instanceof BadRequestException || error instanceof NotFoundException) {
@@ -202,12 +184,6 @@ export class UserService {
   // ======== Get user info by ID ========
   async getUserInfo(id: string) {
     try {
-      const cacheKey = `userInfo${id}`;
-      const cacheData = await this.redisCacheService.get(cacheKey);
-
-      if (cacheData) {
-        return cacheData;
-      }
 
       const user = await this.userModel.findById(id).exec();
 
@@ -222,17 +198,11 @@ export class UserService {
         data.vendorInfo = vendorInfo
       }
 
-
-
-
       const result = {
         success: true,
         message: 'User found successfully',
         data,
       };
-
-      // save caching
-      await this.redisCacheService.set(cacheKey, result, 60);
 
       return result;
     } catch (error) {
@@ -261,11 +231,6 @@ export class UserService {
       const updatedUserData = { ...user.toObject(), ...data };
 
       const updatedData = await this.userModel.findByIdAndUpdate(id, updatedUserData, { new: true, upsert: true });
-
-      // remove caching
-      await this.redisCacheService.del('getAllUser');
-      await this.redisCacheService.del(`myInfo${user._id}`);
-      await this.redisCacheService.del(`userInfo${user._id}`);
 
       const result = {
         success: true,

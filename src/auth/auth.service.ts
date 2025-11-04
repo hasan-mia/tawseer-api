@@ -134,9 +134,15 @@ export class AuthService {
       // Generate OTP
       const otp = generateRandomFourDigitOtp();
 
-      // Save OTP to the user document
-      user.otp = otp;
-      await user.save();
+      // Set OTP expiry (10 minutes from now)
+      const otpExpiry = new Date();
+      otpExpiry.setMinutes(otpExpiry.getMinutes() + 10);
+
+      // Save OTP and expiry to user
+      await this.userModel.findByIdAndUpdate(user._id, {
+        otp,
+        otp_expiry: otpExpiry
+      });
 
       const name = user?.first_name + " " + user?.last_name || 'Sir..';
 
@@ -165,33 +171,43 @@ export class AuthService {
     }
   }
 
-  // =============== Varify otp =================
-  async varifyOtp(data: OtpDto) {
+  // =============== Verify otp =================
+  async verifyOtp(data: OtpDto) {
     try {
-      const { email, otp } = data;
-      const user = await this.userModel.findOne({ email, otp });
+      const { otp } = data;
+
+      // Find user by OTP
+      const user = await this.userModel.findOne({
+        otp,
+        otp_expiry: { $gt: new Date() }
+      });
 
       if (!user) {
-        throw new UnauthorizedException('Invalid OTP');
+        throw new UnauthorizedException('Invalid or expired OTP');
       }
 
-      // Clear the OTP after successful verification
-      await this.userModel.findOneAndUpdate({ email }, { otp: '' });
+      // Clear the OTP and expiry after successful verification
+      await this.userModel.findByIdAndUpdate(user._id, {
+        otp: null,
+        otp_expiry: null
+      });
 
-      // Generate JWT token
+      // Generate JWT token with reasonable expiration (15 minutes for password reset)
       const token = this.jwtService.sign(
-        { id: user._id },
-        { expiresIn: '1m' }
+        { id: user._id, purpose: 'password_reset' },
+        { expiresIn: '5m' }
       );
 
       const result = {
-        message: 'Successfully verified',
-        token: token,
+        success: true,
+        message: 'OTP verified successfully',
+        token,
       };
-
       return result;
     } catch (error) {
-      if (error instanceof BadRequestException || error instanceof NotFoundException || error instanceof UnauthorizedException) {
+      if (error instanceof BadRequestException ||
+        error instanceof NotFoundException ||
+        error instanceof UnauthorizedException) {
         throw error;
       }
       throw new InternalServerErrorException(error.message);
@@ -199,29 +215,35 @@ export class AuthService {
   }
 
   // =============== Reset password with otp =================
-  async resetPassword(userId: string, data: OtpDto) {
+  async resetPassword(data: OtpDto) {
+    const { token, password } = data;
     try {
-      const { password } = data;
-      const user = await this.userModel.findOne({ _id: userId });
+      // Decode token
+      const decoded: any = this.jwtService.verify(token);
+
+      const user = await this.userModel.findOne({ _id: decoded.id });
 
       if (!user) {
-        throw new UnauthorizedException('Invalid OTP');
+        throw new NotFoundException('User not found.');
       }
 
-      // Hash the password
+      // Hash new password
       const hashedPassword = await bcrypt.hash(password, 10);
 
-      await this.userModel.findOneAndUpdate({ _id: userId }, { password: hashedPassword });
+      // Update password
+      user.password = hashedPassword;
+      await user.save();
 
-      const result = {
-        message: 'Password reset successfully',
-
+      return {
+        success: true,
+        message: 'Password reset successfully.',
       };
-
-      return result;
     } catch (error) {
-      if (error instanceof BadRequestException || error instanceof NotFoundException || error instanceof UnauthorizedException) {
-        throw error;
+      if (error.name === 'TokenExpiredError') {
+        throw new UnauthorizedException('Token expired. Please verify OTP again.');
+      }
+      if (error.name === 'JsonWebTokenError') {
+        throw new UnauthorizedException('Invalid token.');
       }
       throw new InternalServerErrorException(error.message);
     }
@@ -230,15 +252,6 @@ export class AuthService {
   // =========Ge My Info =============
   async getMyInfo(id: string) {
     try {
-      const cacheKey = `myInfo${id}`;
-
-
-      const cachedMyInfo = await this.redisCacheService.get(cacheKey);
-
-      if (cachedMyInfo) {
-        return { success: true, data: cachedMyInfo };
-      }
-
       const user = await this.userModel
         .findOne({ _id: id })
         .select('-password')
@@ -251,11 +264,10 @@ export class AuthService {
       let result: any = user.toObject();
 
       if (user.role === 'vendor') {
-        const vendorInfo = await this.vendorModel.findOne({ user: id }).select('name logo cover type mobile slug')
+        const vendorInfo = await this.vendorModel.findOne({ user: id })
         result.vendorInfo = vendorInfo
       }
 
-      await this.redisCacheService.set(cacheKey, user, 60);
 
       return { success: true, data: result };
     } catch (error) {
@@ -278,10 +290,6 @@ export class AuthService {
       if (!user) {
         throw new NotFoundException('User not found');
       }
-
-      // Clear Redis cache for user info
-      const cacheKey = `myInfo${userId}`;
-      await this.redisCacheService.del(cacheKey);
 
       return {
         success: true,

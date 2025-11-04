@@ -1,4 +1,3 @@
-/* eslint-disable prettier/prettier */
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { v4 as uuidv4 } from 'uuid';
@@ -57,25 +56,25 @@ export class Notification extends Document {
     priority: NotificationPriority;
 
     @Prop({ type: Object, default: {} })
-    data: Record<string, any>; // Additional data for the notification
+    data: Record<string, any>;
 
     @Prop({ type: String })
-    image: string; // Optional image URL
+    image: string;
 
     @Prop({ type: String })
-    icon: string; // Optional icon
+    icon: string;
 
     @Prop({ type: String })
-    sound: string; // Custom sound
+    sound: string;
 
     @Prop({ type: String })
-    category: string; // For notification categories
+    category: string;
 
     @Prop({ type: String })
-    actionUrl: string; // Deep link or action URL
+    actionUrl: string;
 
     @Prop({ type: String })
-    externalId: string; // Reference to external resource (booking ID, order ID, etc.)
+    externalId: string;
 
     @Prop({ default: false })
     isRead: boolean;
@@ -96,16 +95,20 @@ export class Notification extends Document {
     sentAt: Date;
 
     @Prop({ type: Date })
-    scheduledFor: Date; // For scheduled notifications
+    scheduledFor: Date;
 
     @Prop({ type: Array, default: [] })
-    tags: string[]; // For filtering and categorization
+    tags: string[];
 
     @Prop({ default: false })
     isDeleted: boolean;
 
     @Prop({ type: Date })
-    expiresAt: Date; // Auto-delete after this date
+    expiresAt: Date;
 }
 
 export const NotificationSchema = SchemaFactory.createForClass(Notification);
+
+NotificationSchema.index({ recipient: 1, isRead: 1 });
+NotificationSchema.index({ externalId: 1, type: 1 });
+NotificationSchema.index({ sentAt: 1 });
