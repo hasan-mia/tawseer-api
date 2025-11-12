@@ -480,7 +480,7 @@ export class QueueManagementService implements OnModuleInit {
                 appointmentId,
                 customMessage: true,
             },
-            actionUrl: appointmentId ? `/appointments/${appointmentId}` : `/vendors/${vendorId}`,
+            actionUrl: "/(main)/appointment",
             externalId: appointmentId,
             tags: ['vendor', 'message', 'manual'],
             sound: 'default',
