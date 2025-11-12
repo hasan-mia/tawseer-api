@@ -22,7 +22,7 @@ export class TransactionService {
         vendor?: string;
         type: 'subscribe' | 'service' | 'coin' | 'product' | 'withdraw' | 'deposit' | 'refund' | 'appointment';
         payment_method: 'cash_on' | 'stripe' | 'paypal' | 'bkash' | 'nagad' | 'paytm' | 'bank_transfer' | 'wallet';
-        referenceType: 'Service' | 'Product' | 'Appointment' | 'Subscription';
+        referenceType: 'service' | 'product' | 'appointment' | 'subscription';
         referenceId: string;
         amount: number;
         currency: string;

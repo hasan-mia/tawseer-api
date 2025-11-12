@@ -87,7 +87,7 @@ export class AppointmentService {
         vendor: service.vendor.toString(),
         type: 'appointment',
         payment_method: data.payment_method,
-        referenceType: 'Appointment',
+        referenceType: 'appointment',
         referenceId: appointment._id.toString(),
         amount,
         currency: 'USD',
@@ -119,6 +119,7 @@ export class AppointmentService {
         },
       };
     } catch (error) {
+      console.log(error)
       if (error instanceof NotFoundException) {
         throw error;
       }
