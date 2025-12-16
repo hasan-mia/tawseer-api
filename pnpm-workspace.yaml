@@ -1,0 +1,7 @@
+ignoredBuiltDependencies:
+  - '@firebase/util'
+  - '@nestjs/core'
+  - protobufjs
+
+onlyBuiltDependencies:
+  - '@ffmpeg-installer/linux-x64'
