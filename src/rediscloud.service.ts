@@ -9,11 +9,12 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
   constructor() {
     if (!RedisCacheService.client) {
       RedisCacheService.client = new Redis({
-        host: process.env.REDIS_HOST,
-        port: parseInt(process.env.REDIS_PORT),
-        password: process.env.REDIS_PASS,
+        host: process.env.REDIS_HOST || '127.0.0.1',
+        port: Number(process.env.REDIS_PORT) || 6379,
+        password: process.env.REDIS_PASS || undefined,
         maxRetriesPerRequest: null,
         enableAutoPipelining: true,
+        retryStrategy: (times) => Math.min(times * 100, 2000),
       });
 
       RedisCacheService.client.on('connect', () => {
