@@ -20,7 +20,7 @@ async function bootstrap() {
     rawBody: true,
   });
 
-  app.setGlobalPrefix('/tawseer/v1');
+  app.setGlobalPrefix('/api/v1');
 
   app.enableCors({
     origin: '*',
