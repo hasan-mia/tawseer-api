@@ -15,6 +15,10 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
         maxRetriesPerRequest: null,
         enableAutoPipelining: true,
         retryStrategy: (times) => Math.min(times * 100, 2000),
+        // Add TLS configuration for Redis Cloud
+        tls: process.env.REDIS_TLS === 'true' ? {
+          rejectUnauthorized: false
+        } : undefined,
       });
 
       RedisCacheService.client.on('connect', () => {
