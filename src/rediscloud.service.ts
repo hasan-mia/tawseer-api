@@ -4,45 +4,41 @@ import Redis from 'ioredis';
 @Injectable()
 export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RedisCacheService.name);
-  private static client: Redis;
-
-  constructor() {
-    if (!RedisCacheService.client) {
-      RedisCacheService.client = new Redis({
-        host: process.env.REDIS_HOST || '127.0.0.1',
-        port: Number(process.env.REDIS_PORT) || 6379,
-        password: process.env.REDIS_PASS || undefined,
-        maxRetriesPerRequest: null,
-        enableAutoPipelining: true,
-        retryStrategy: (times) => Math.min(times * 100, 2000),
-        // Add TLS configuration for Redis Cloud
-        tls: process.env.REDIS_TLS === 'true' ? {
-          rejectUnauthorized: false
-        } : undefined,
-      });
-
-      RedisCacheService.client.on('connect', () => {
-        this.logger.log('Connected to Redis');
-      });
-
-      RedisCacheService.client.on('error', (error) => {
-        this.logger.error(`Error connecting to Redis: ${error.message}`);
-      });
-    }
-  }
+  private client: Redis; // Remove 'static' for standard dependency injection
 
   onModuleInit() {
-    this.logger.log('RedisCacheService initialized');
+    // Variables are guaranteed to be loaded here if using ConfigModule
+    const host = process.env.REDIS_HOST || '3.91.182.69';
+    const port = Number(process.env.REDIS_PORT) || 11728;
+    const password = process.env.REDIS_PASS;
+
+    this.logger.log(`Initializing Redis connection to ${host}:${port}...`);
+
+    this.client = new Redis({
+      host,
+      port,
+      password,
+      family: 0, // Auto-detect IPv4/IPv6 to avoid connection drops
+      maxRetriesPerRequest: null,
+      enableAutoPipelining: true,
+      retryStrategy: (times) => Math.min(times * 100, 2000),
+      // Only use TLS if your specific Redis provider requires it
+      tls: process.env.REDIS_TLS === 'true' ? { rejectUnauthorized: false } : undefined,
+    });
+
+    this.client.on('connect', () => this.logger.log('Successfully connected to Redis'));
+    this.client.on('error', (err) => this.logger.error(`Redis Client Error: ${err.message}`));
   }
 
   onModuleDestroy() {
-    this.logger.log('Closing Redis connection');
-    RedisCacheService.client.quit();
+    this.client?.quit();
   }
+
+
 
   async set(key: string, value: any, ttl: number): Promise<void> {
     try {
-      await RedisCacheService.client.set(key, JSON.stringify(value), 'EX', ttl);
+      await this.client.set(key, JSON.stringify(value), 'EX', ttl);
       this.logger.log(`Value set in Redis for key: ${key}`);
     } catch (error) {
       this.logger.error(`Error setting value in Redis: ${error.message}`);
@@ -50,9 +46,11 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+
+
   async get(key: string): Promise<any | null> {
     try {
-      const value = await RedisCacheService.client.get(key);
+      const value = await this.client.get(key);
       return value ? JSON.parse(value) : null;
     } catch (error) {
       this.logger.error(`Error getting value from Redis: ${error.message}`);
@@ -62,7 +60,7 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
 
   async del(key: string): Promise<void> {
     try {
-      await RedisCacheService.client.del(key);
+      await this.client.del(key);
       this.logger.log(`Value deleted from Redis for key: ${key}`);
     } catch (error) {
       this.logger.error(`Error deleting value from Redis: ${error.message}`);
