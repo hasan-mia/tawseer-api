@@ -1,6 +1,4 @@
-/* eslint-disable prettier/prettier */
 import { CloudinaryService } from '@/cloudinary/cloudinary.service';
-import { RedisCacheService } from '@/rediscloud.service';
 import { UserSchema } from '@/schemas/user.schema';
 import { VendorSchema } from '@/schemas/vendor.schema';
 import { VendorFollowSchema } from '@/schemas/vendorFollow.schema';
@@ -18,7 +16,7 @@ import { VendorService } from './vendor.service';
     ]),
   ],
   controllers: [VendorController],
-  providers: [VendorService, CloudinaryService, RedisCacheService],
+  providers: [VendorService, CloudinaryService],
   exports: [VendorService],
 })
 export class VendorModule { }

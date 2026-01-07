@@ -1,5 +1,4 @@
 
-import { RedisCacheService } from '@/rediscloud.service';
 import { Service } from '@/schemas/service.schema';
 import { User } from '@/schemas/user.schema';
 import { Vendor } from '@/schemas/vendor.schema';
@@ -22,7 +21,6 @@ export class ServiceService {
     private serviceModel: Model<Service>,
     @InjectModel(Vendor.name)
     private vendorModel: Model<Vendor>,
-    private readonly redisCacheService: RedisCacheService
   ) { }
 
   // ======== Create new service ========
@@ -47,9 +45,6 @@ export class ServiceService {
       };
 
       const saveData = await this.serviceModel.create(finalData);
-
-      // remove caching
-      // await this.redisCacheService.del('getAllService');
 
       const result = {
         success: true,
@@ -91,11 +86,6 @@ export class ServiceService {
         { new: true, upsert: true },
       );
 
-      // // remove caching
-      // await this.redisCacheService.del('getAllService');
-      // await this.redisCacheService.del(`serviceDetails${exist._id}`);
-      // await this.redisCacheService.del(`getAllService-${id}`);
-
       const result = {
         success: true,
         message: 'Update successfully',
@@ -114,12 +104,6 @@ export class ServiceService {
   // ======== Get all service ========
   async getAllService(req: any) {
     try {
-      // const cacheKey = `getAllService_${JSON.stringify(req.query)}`;
-      // const cacheData = await this.redisCacheService.get(cacheKey);
-
-      // if (cacheData) {
-      //   return cacheData;
-      // }
 
       const { keyword, price, cat, limit, page } = req.query;
 
@@ -194,9 +178,6 @@ export class ServiceService {
         nextUrl,
       };
 
-      // Cache the data
-      // await this.redisCacheService.set(cacheKey, data, 60);
-
       return data;
     } catch (error) {
       if (error instanceof BadRequestException || error instanceof NotFoundException) {
@@ -209,14 +190,6 @@ export class ServiceService {
   // ======== Get service details by ID ========
   async getServiceDetails(id: string) {
     try {
-      // const cacheKey = `serviceDetails${id}`;
-
-      // const cacheData = await this.redisCacheService.get(cacheKey);
-
-      // if (cacheData) {
-      //   return cacheData;
-      // }
-
       const data = await this.serviceModel.findById(id)
         .populate('user', 'name mobile email')
         .populate('vendor', 'name email mobile')
@@ -232,9 +205,6 @@ export class ServiceService {
         data: data,
       };
 
-      // save caching
-      // await this.redisCacheService.set(cacheKey, result, 60);
-
       return result;
     } catch (error) {
       if (error instanceof BadRequestException || error instanceof NotFoundException) {
@@ -247,12 +217,6 @@ export class ServiceService {
   // ======== Get all service by vendor ID ========
   async getAllServiceByVendorId(id: string, req: any) {
     try {
-      // const cacheKey = `getAllService-${id}`;
-      // const cacheData = await this.redisCacheService.get(cacheKey);
-
-      // if (cacheData) {
-      //   return cacheData;
-      // }
 
       const existVendor = await this.vendorModel.findById(id);
       if (!existVendor) {
@@ -332,9 +296,6 @@ export class ServiceService {
         nextUrl,
       };
 
-      // Cache the data
-      // await this.redisCacheService.set(cacheKey, data, 60);
-
       return data;
     } catch (error) {
       if (error instanceof BadRequestException || error instanceof NotFoundException) {
@@ -358,11 +319,6 @@ export class ServiceService {
         success: true,
         message: 'Service delete successfully',
       };
-
-      // // remove caching
-      // await this.redisCacheService.del('getAllService');
-      // await this.redisCacheService.del(`serviceDetails${id}`);
-      // await this.redisCacheService.del(`getAllService-${id}`);
 
       return result;
     } catch (error) {

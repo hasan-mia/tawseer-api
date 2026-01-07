@@ -1,5 +1,4 @@
 import { CloudinaryService } from '@/cloudinary/cloudinary.service';
-import { RedisCacheService } from '@/rediscloud.service';
 import { CategorySchema } from '@/schemas/category.schema'; // Import Category Schema
 import { VendorSchema } from '@/schemas/vendor.schema';
 import { Module } from '@nestjs/common';
@@ -17,7 +16,7 @@ import { CategoryService } from './category.service';
     ]),
   ],
   controllers: [CategoryController],
-  providers: [CategoryService, CloudinaryService, RedisCacheService],
+  providers: [CategoryService, CloudinaryService],
   exports: [CategoryService],
 })
 export class CategoryModule { }

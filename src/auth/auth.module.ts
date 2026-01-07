@@ -1,5 +1,4 @@
 /* eslint-disable prettier/prettier */
-import { RedisCacheService } from '@/rediscloud.service';
 import { UserSchema } from '@/schemas/user.schema';
 import { VendorSchema } from '@/schemas/vendor.schema';
 import { Module } from '@nestjs/common';
@@ -36,7 +35,7 @@ import { SmsService } from './sms.service';
     MongooseModule.forFeature([{ name: 'User', schema: UserSchema }, { name: 'Vendor', schema: VendorSchema }]),
   ],
   controllers: [AuthController],
-  providers: [AuthService, SmsService, JwtStrategy, RedisCacheService, EmailService],
+  providers: [AuthService, SmsService, JwtStrategy, EmailService],
   exports: [JwtStrategy, PassportModule, AuthService],
 })
 // eslint-disable-next-line prettier/prettier

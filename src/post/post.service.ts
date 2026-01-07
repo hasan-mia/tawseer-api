@@ -1,4 +1,3 @@
-/* eslint-disable prettier/prettier */
 import { CloudinaryService } from '@/cloudinary/cloudinary.service';
 import { getPublicIdFromUrl } from '@/helpers/myHelper.helper';
 import { Friend } from '@/schemas/friend.schema';
@@ -6,7 +5,6 @@ import { Post } from '@/schemas/post.schema';
 import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { RedisCacheService } from '../rediscloud.service';
 import { User } from '../schemas/user.schema';
 import { PostDto } from './dto/post.dto';
 
@@ -35,7 +33,6 @@ export class PostService {
     private postModel: Model<Post>,
     @InjectModel(Friend.name)
     private friendModel: Model<Friend>,
-    private readonly redisCacheService: RedisCacheService,
     private readonly cloudinaryService: CloudinaryService,
   ) { }
 
@@ -55,9 +52,6 @@ export class PostService {
       }
 
       const saveData = await this.postModel.create(finalData);
-
-      // remove caching
-      await this.redisCacheService.del('getAllPost');
 
       const result = {
         success: true,
@@ -94,10 +88,6 @@ export class PostService {
 
       const updatedSaveData = await this.postModel.findByIdAndUpdate(exist._id, updatedData);
 
-      // remove caching
-      await this.redisCacheService.del('getAllPost');
-      await this.redisCacheService.del(`postDetails${exist._id}`);
-
       const result = {
         success: true,
         message: 'Update successfully',
@@ -116,12 +106,6 @@ export class PostService {
   // ======== Get all post ========
   async getAllPost(req: any) {
     try {
-      const cacheKey = `getAllPost`;
-      const cacheData = await this.redisCacheService.get(cacheKey);
-      // if (cacheData) {
-      //   return cacheData;
-      // }
-
       const { keyword, limit, page } = req.query;
 
       let perPage: number | undefined;
@@ -178,9 +162,6 @@ export class PostService {
         nextUrl,
       };
 
-
-      await this.redisCacheService.set(cacheKey, data, 60);
-
       return data;
     } catch (error) {
       if (error instanceof BadRequestException || error instanceof NotFoundException) {
@@ -194,13 +175,6 @@ export class PostService {
   async getPostDetails(id: string) {
 
     try {
-      const cacheKey = `postDetails${id}`;
-      const cacheData = await this.redisCacheService.get(cacheKey);
-
-      // if (cacheData) {
-      //   return cacheData;
-      // }
-
       const data = await this.postModel.findById(id)
         .populate('user', 'name email mobile avatar cover')
         .populate('photos', 'urls')
@@ -211,9 +185,6 @@ export class PostService {
       if (!data) {
         throw new NotFoundException('Post not found');
       }
-
-      // remove caching
-      await this.redisCacheService.set(cacheKey, data, 60);
 
       const result = {
         success: true,
@@ -235,12 +206,6 @@ export class PostService {
     const userId = req.params.id;
 
     try {
-      const cacheKey = `getAllUserPost${userId}`;
-      const cacheData = await this.redisCacheService.get(cacheKey);
-      // if (cacheData) {
-      //   return cacheData;
-      // }
-
       const { keyword, limit, page } = req.query;
 
       let perPage: number | undefined;
@@ -310,9 +275,6 @@ export class PostService {
         nextPage,
         nextUrl,
       };
-
-      // Cache the result for 30 minutes
-      await this.redisCacheService.set(cacheKey, data, 60);
 
       return data;
     } catch (error) {
@@ -400,13 +362,6 @@ export class PostService {
     }
 
     try {
-      const cacheKey = `getFriendsAndFollowingPosts${targetUserId}`
-      const cacheData = await this.redisCacheService.get(cacheKey)
-      // Uncomment if you want to use caching
-      // if (cacheData) {
-      //   return cacheData;
-      // }
-
       const { keyword, limit, page } = req.query
 
       let perPage: number | undefined
@@ -508,9 +463,6 @@ export class PostService {
         nextPage,
         nextUrl,
       }
-
-      // Cache the result for 30 minutes
-      await this.redisCacheService.set(cacheKey, data, 60)
 
       return data
     } catch (error) {

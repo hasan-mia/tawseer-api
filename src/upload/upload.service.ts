@@ -1,6 +1,5 @@
 import { CloudinaryService } from '@/cloudinary/cloudinary.service';
 import { getPublicIdFromUrl } from '@/helpers/myHelper.helper';
-import { RedisCacheService } from '@/rediscloud.service';
 import { Photo } from '@/schemas/photo.schema';
 import { User } from '@/schemas/user.schema';
 import { Video } from '@/schemas/video.schema';
@@ -22,7 +21,6 @@ export class UploadService {
     private photoModel: Model<Photo>,
     @InjectModel(Video.name)
     private videoModel: Model<Video>,
-    private readonly redisCacheService: RedisCacheService,
     private readonly cloudinaryService: CloudinaryService,
   ) { }
 

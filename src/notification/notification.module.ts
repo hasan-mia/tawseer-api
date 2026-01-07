@@ -1,6 +1,4 @@
-/* eslint-disable prettier/prettier */
 import { CloudinaryService } from '@/cloudinary/cloudinary.service';
-import { RedisCacheService } from '@/rediscloud.service';
 import { NotificationSchema } from '@/schemas/notification.schema';
 import { UserSchema } from '@/schemas/user.schema';
 import { VendorSchema } from '@/schemas/vendor.schema';
@@ -18,7 +16,7 @@ import { NotificationService } from './notification.service';
     ]),
   ],
   controllers: [NotificationController],
-  providers: [NotificationService, CloudinaryService, RedisCacheService],
+  providers: [NotificationService, CloudinaryService],
   exports: [NotificationService],
 })
 export class NotificationModule { }

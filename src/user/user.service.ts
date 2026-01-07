@@ -1,4 +1,3 @@
-import { RedisCacheService } from '@/rediscloud.service';
 import { User } from '@/schemas/user.schema';
 import { Vendor } from '@/schemas/vendor.schema';
 import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
@@ -13,7 +12,6 @@ export class UserService {
     private userModel: Model<User>,
     @InjectModel(Vendor.name)
     private vendorModel: Model<Vendor>,
-    private readonly redisCacheService: RedisCacheService
   ) { }
 
   // ======== Update User Profile ========

@@ -1,10 +1,9 @@
-import { RedisCacheService } from '@/rediscloud.service';
+import { User } from '@/schemas/user.schema';
+import { Vendor } from '@/schemas/vendor.schema';
 import { VendorFollow } from '@/schemas/vendorFollow.schema';
 import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Vendor } from '@/schemas/vendor.schema';
-import { User } from '@/schemas/user.schema';
 import { DayOfWeek, updateVendor } from './dto/updateVendor.dto';
 import { VendorDto } from './dto/vendor.dto';
 
@@ -17,7 +16,6 @@ export class VendorService {
     private vendorModel: Model<Vendor>,
     @InjectModel(VendorFollow.name)
     private vendorFollowModel: Model<VendorFollow>,
-    private readonly redisCacheService: RedisCacheService
   ) { }
 
   // ======== Create new Vendor ========
@@ -60,8 +58,6 @@ export class VendorService {
       };
 
       const saveData = await this.vendorModel.create(finalData);
-
-      await this.redisCacheService.del('getAllVendor');
 
       return {
         success: true,
@@ -111,10 +107,6 @@ export class VendorService {
       const updatedVendorData = { ...existVendor.toObject(), ...data };
 
       const updatedVendor = await this.vendorModel.findByIdAndUpdate(existVendor._id, updatedVendorData, { new: true, upsert: true });
-
-      // remove caching
-      await this.redisCacheService.del('getAllVendor');
-      await this.redisCacheService.del(`VendorInfo${existVendor._id}`);
 
       const result = {
         success: true,
@@ -243,10 +235,6 @@ export class VendorService {
         nextPage,
         nextUrl,
       };
-
-      // // Cache the result
-      // const cacheTTL = (longitude && latitude) ? 30 : 300; // Shorter TTL for location queries
-      // await this.redisCacheService.set(cacheKey, data, cacheTTL);
 
       return data;
     } catch (error) {
@@ -379,10 +367,6 @@ export class VendorService {
 
       const updatedVendor = await this.vendorModel.findByIdAndUpdate(existVendor._id, updatedVendorData, { new: true, upsert: true });
 
-      // remove caching
-      await this.redisCacheService.del('getAllVendor');
-      await this.redisCacheService.del(`VendorInfo${existVendor._id}`);
-
       const result = {
         success: true,
         message: 'Update successfully',
@@ -406,10 +390,6 @@ export class VendorService {
       if (!data) {
         throw new NotFoundException('Vendor not found');
       }
-
-      // remove caching
-      await this.redisCacheService.del('getAllVendor');
-      await this.redisCacheService.del(`VendorInfo${data.slug}`);
 
       const result = {
         success: true,

@@ -1,6 +1,4 @@
-/* eslint-disable prettier/prettier */
 import { CloudinaryService } from '@/cloudinary/cloudinary.service';
-import { RedisCacheService } from '@/rediscloud.service';
 import { CommentSchema } from '@/schemas/comment.schema';
 import { PostSchema } from '@/schemas/post.schema';
 import { Module } from '@nestjs/common';
@@ -18,7 +16,7 @@ import { CommentService } from './comment.service';
     ]),
   ],
   controllers: [CommentController],
-  providers: [CommentService, CloudinaryService, RedisCacheService],
+  providers: [CommentService, CloudinaryService],
   exports: [CommentService],
 })
 export class CommentModule { }

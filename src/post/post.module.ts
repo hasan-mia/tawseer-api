@@ -1,6 +1,4 @@
-/* eslint-disable prettier/prettier */
 import { CloudinaryService } from '@/cloudinary/cloudinary.service';
-import { RedisCacheService } from '@/rediscloud.service';
 import { FriendSchema } from '@/schemas/friend.schema';
 import { PhotoSchema } from '@/schemas/photo.schema';
 import { PostSchema } from '@/schemas/post.schema';
@@ -22,7 +20,7 @@ import { PostService } from './post.service';
     ]),
   ],
   controllers: [PostController],
-  providers: [PostService, CloudinaryService, RedisCacheService],
+  providers: [PostService, CloudinaryService],
   exports: [PostService],
 })
 export class PostModule { }

@@ -1,5 +1,3 @@
-/* eslint-disable prettier/prettier */
-import { RedisCacheService } from '@/rediscloud.service';
 import { Comment } from '@/schemas/comment.schema';
 import { Post } from '@/schemas/post.schema';
 import {
@@ -22,7 +20,6 @@ export class CommentService {
     private postModel: Model<Post>,
     @InjectModel(Comment.name)
     private commentModel: Model<Comment>,
-    private readonly redisCacheService: RedisCacheService
   ) { }
 
   // ======== Create new comment ========
@@ -47,9 +44,6 @@ export class CommentService {
       };
 
       const saveData = await this.commentModel.create(finalData);
-
-      // remove caching
-      await this.redisCacheService.del(`getAllComment${postId}`);
 
       const result = {
         success: true,
@@ -91,9 +85,6 @@ export class CommentService {
         { new: true }
       );
 
-      // remove caching
-      await this.redisCacheService.del(`getAllComment${exist.post}`);
-
       const result = {
         success: true,
         message: 'Update successfully',
@@ -134,9 +125,6 @@ export class CommentService {
         { new: true }
       );
 
-      // remove caching
-      await this.redisCacheService.del(`getAllComment${exist.post}`);
-
       const result = {
         success: true,
         message: 'Delete successfully',
@@ -156,12 +144,6 @@ export class CommentService {
   async getCommentByPostId(req: any) {
     const postId = req.params.id;
     try {
-      const cacheKey = `getAllComment${postId}`;
-      const cacheData = await this.redisCacheService.get(cacheKey);
-      // if (cacheData) {
-      //   return cacheData;
-      // }
-
       const { keyword, limit, page } = req.query;
 
       let perPage: number | undefined;
@@ -214,8 +196,6 @@ export class CommentService {
         nextPage,
         nextUrl,
       };
-
-      await this.redisCacheService.set(cacheKey, data, 60);
 
       return data;
     } catch (error) {

@@ -1,6 +1,4 @@
-/* eslint-disable prettier/prettier */
 import { CloudinaryService } from '@/cloudinary/cloudinary.service';
-import { RedisCacheService } from '@/rediscloud.service';
 import { ProductSchema } from '@/schemas/product.schema';
 import { ReviewSchema } from '@/schemas/review.schema';
 import { ServiceSchema } from '@/schemas/service.schema';
@@ -22,7 +20,7 @@ import { ReviewService } from './review.service';
     ]),
   ],
   controllers: [ReviewController],
-  providers: [ReviewService, CloudinaryService, RedisCacheService],
+  providers: [ReviewService, CloudinaryService],
   exports: [ReviewService],
 })
 export class ReviewModule { }

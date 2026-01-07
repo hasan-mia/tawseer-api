@@ -1,4 +1,3 @@
-import { RedisCacheService } from '@/rediscloud.service';
 import { Product } from '@/schemas/product.schema';
 import { User } from '@/schemas/user.schema';
 import { Variant } from '@/schemas/variant.schema';
@@ -32,7 +31,6 @@ export class ProductService {
     private productModel: Model<Product>,
     @InjectModel(Variant.name)
     private variantModel: Model<Variant>,
-    private readonly redisCacheService: RedisCacheService
   ) { }
 
   // ======== Create Product with Variants ========
@@ -81,12 +79,6 @@ export class ProductService {
 
       await session.commitTransaction();
       session.endSession();
-
-      // Clear cache
-      await this.redisCacheService.del('getAllProducts');
-      if (vendor) {
-        await this.redisCacheService.del(`vendor_products_${vendor._id}`);
-      }
 
       // Fetch the complete product with its variants
       const savedProduct = await this.productModel
@@ -182,11 +174,6 @@ export class ProductService {
       await session.commitTransaction();
       session.endSession();
 
-      // Clear cache
-      await this.redisCacheService.del('getAllProducts');
-      await this.redisCacheService.del(`product_with_variants_${productId}`);
-      await this.redisCacheService.del(`product_with_variants_${product.slug}`);
-
       // Get updated product with variants
       const updatedProduct = await this.productModel
         .findById(productId)
@@ -220,13 +207,6 @@ export class ProductService {
   // ======== Get Product with Variants ========
   async getProductWithVariants(productIdOrSlug: string) {
     try {
-      const cacheKey = `product_with_variants_${productIdOrSlug}`;
-      const cacheData = await this.redisCacheService.get(cacheKey);
-
-      // if (cacheData) {
-      //   return cacheData;
-      // }
-
       // Try to find by ID first, then by slug
       let product;
       if (Types.ObjectId.isValid(productIdOrSlug)) {
@@ -264,9 +244,6 @@ export class ProductService {
         },
       };
 
-      // Cache the result
-      await this.redisCacheService.set(cacheKey, result, 60);
-
       return result;
     } catch (error) {
       if (error instanceof NotFoundException) {
@@ -279,19 +256,6 @@ export class ProductService {
   // ======== Get All Products with Variants ========
   async getAllProductsWithVariants(req: any) {
     try {
-      const cacheKey = `getAllProducts-${JSON.stringify(req.query)}`;
-      let cacheData;
-
-      try {
-        cacheData = await this.redisCacheService.get(cacheKey);
-      } catch (cacheError) {
-        console.error("Error accessing cache:", cacheError);
-      }
-
-      // if (cacheData) {
-      //   return cacheData;
-      // }
-
       const { keyword, limit, page, sortBy, sortOrder } = req.query;
 
       let perPage: number | undefined;
@@ -394,9 +358,6 @@ export class ProductService {
         nextUrl,
       };
 
-      // Cache the result
-      await this.redisCacheService.set(cacheKey, data, 60);
-
       return data;
     } catch (error) {
       if (error instanceof BadRequestException || error instanceof NotFoundException) {
@@ -434,20 +395,6 @@ export class ProductService {
         const deleteProductResult = await this.productModel.findByIdAndDelete(productId).session(session);
 
         await session.commitTransaction();
-
-        // Clear cache
-        // try {
-        //   await this.redisCacheService.del(`getAllProducts`);
-        //   await this.redisCacheService.del(`product:${productId}`);
-        //   // Clear any other related cache keys
-        //   const cacheKeys = await this.redisCacheService.keys('getAllProducts*');
-        //   if (cacheKeys.length > 0) {
-        //     await Promise.all(cacheKeys.map(key => this.redisCacheService.del(key)));
-        //   }
-        // } catch (cacheError) {
-        //   console.error("Error clearing cache:", cacheError);
-        //   // Continue execution even if cache clearing fails
-        // }
 
         return {
           success: true,

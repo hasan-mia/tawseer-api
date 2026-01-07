@@ -1,7 +1,6 @@
 import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { RedisCacheService } from '../rediscloud.service';
 import { Friend } from '../schemas/friend.schema';
 import { User } from '../schemas/user.schema';
 
@@ -12,7 +11,6 @@ export class FriendService {
     private userModel: Model<User>,
     @InjectModel(Friend.name)
     private friendModel: Model<Friend>,
-    private readonly redisCacheService: RedisCacheService
   ) { }
 
   // ======== Send friend request ========
@@ -328,18 +326,6 @@ export class FriendService {
         throw new BadRequestException('Invalid user ID');
       }
 
-      // Use cache if available
-      const cacheKey = `friend_list_${userId}`;
-      const cachedData = await this.redisCacheService.get(cacheKey);
-
-      if (cachedData) {
-        return {
-          success: true,
-          message: 'Retrieved friend list from cache',
-          data: JSON.parse(cachedData)
-        };
-      }
-
       const user = await this.userModel.findById(userId).exec();
 
       if (!user) {
@@ -358,13 +344,6 @@ export class FriendService {
       const friendList = await this.userModel.find(
         { _id: { $in: user.friends } },
         'email first_name last_name avatar cover bio'
-      );
-
-      // Cache the result
-      await this.redisCacheService.set(
-        cacheKey,
-        JSON.stringify(friendList),
-        60 * 15 // 15 minutes
       );
 
       return {

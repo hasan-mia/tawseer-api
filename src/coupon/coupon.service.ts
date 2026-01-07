@@ -9,7 +9,6 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { RedisCacheService } from '../rediscloud.service';
 import { CouponDto, CouponUpdateDto } from './dto/coupon.dto';
 
 @Injectable()
@@ -21,7 +20,6 @@ export class CouponService {
     private vendorModel: Model<Vendor>,
     @InjectModel(Coupon.name)
     private couponModel: Model<Coupon>,
-    private readonly redisCacheService: RedisCacheService
   ) { }
 
   // ======== Create new coupon ========
@@ -44,10 +42,6 @@ export class CouponService {
       const finalData = { user: id, ...data };
 
       const saveData = await this.couponModel.create(finalData);
-
-      // if (data.vendor) {
-      //   await this.redisCacheService.del(`getAllVendorCoupon${data.vendor}`);
-      // }
 
       return { success: true, message: 'Created successfully', data: saveData };
     } catch (error) {
@@ -91,10 +85,6 @@ export class CouponService {
         { new: true }
       );
 
-      // Remove cache
-      if (exist.vendor) {
-        await this.redisCacheService.del(`getAllVendorCoupon${exist.vendor}`);
-      }
 
       return { success: true, message: 'Updated successfully', data: updatedSaveData };
     } catch (error) {
@@ -110,13 +100,6 @@ export class CouponService {
   async getCouponByVendorId(req: any) {
     const salonId = req.params.id;
     try {
-      const cacheKey = `getAllVendorCoupon${salonId}`;
-      const cacheData = await this.redisCacheService.get(cacheKey);
-
-      if (cacheData) {
-        return JSON.parse(cacheData); // Ensure JSON parsing
-      }
-
       const { keyword } = req.query;
 
       let perPage: number | undefined;
@@ -158,8 +141,6 @@ export class CouponService {
       }
 
       const data = { success: true, data: result, total: count, perPage, limit, nextPage, nextUrl };
-
-      await this.redisCacheService.set(cacheKey, JSON.stringify(data), 60); // Store as JSON
 
       return data;
     } catch (error) {

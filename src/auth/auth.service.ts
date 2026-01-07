@@ -1,5 +1,4 @@
 import { generateRandomFourDigitOtp } from '@/helpers/otp.helper';
-import { RedisCacheService } from '@/rediscloud.service';
 import { User } from '@/schemas/user.schema';
 import { Vendor } from '@/schemas/vendor.schema';
 import {
@@ -26,7 +25,6 @@ export class AuthService {
     private jwtService: JwtService,
     private smsService: SmsService,
     private readonly emailService: EmailService,
-    private readonly redisCacheService: RedisCacheService,
     @InjectModel(User.name)
     private userModel: Model<User>,
     @InjectModel(Vendor.name)

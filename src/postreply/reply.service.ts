@@ -1,5 +1,3 @@
-/* eslint-disable prettier/prettier */
-import { RedisCacheService } from '@/rediscloud.service';
 import { Comment } from '@/schemas/comment.schema';
 import { Post } from '@/schemas/post.schema';
 import { Reply } from '@/schemas/reply.schema';
@@ -25,7 +23,6 @@ export class ReplyService {
     private commentModel: Model<Comment>,
     @InjectModel(Reply.name)
     private replyModel: Model<Reply>,
-    private readonly redisCacheService: RedisCacheService
   ) { }
 
   // ======== Create new reply ========
@@ -51,10 +48,6 @@ export class ReplyService {
       };
 
       const saveData = await this.replyModel.create(finalData);
-
-      // remove caching
-      await this.redisCacheService.del(`getAllComment${comment.post}`);
-      await this.redisCacheService.del(`getAllReply${comment.post}`);
 
       const result = {
         success: true,
@@ -96,10 +89,6 @@ export class ReplyService {
         { new: true }
       );
 
-      // remove caching
-      await this.redisCacheService.del(`getAllComment${exist.post}`);
-      await this.redisCacheService.del(`getAllReply${exist.post}`);
-
       const result = {
         success: true,
         message: 'Update successfully',
@@ -140,10 +129,6 @@ export class ReplyService {
         { new: true }
       );
 
-      // remove caching
-      await this.redisCacheService.del(`getAllComment${exist.post}`);
-      await this.redisCacheService.del(`getAllReply${exist.post}`);
-
       const result = {
         success: true,
         message: 'Delete successfully',
@@ -163,12 +148,6 @@ export class ReplyService {
   async getReplyByCommentId(req: any) {
     const commentId = req.params.id;
     try {
-      const cacheKey = `getAllReply${commentId}`;
-      const cacheData = await this.redisCacheService.get(cacheKey);
-      // if (cacheData) {
-      //   return cacheData;
-      // }
-
       const { keyword, limit, page } = req.query;
 
       let perPage: number | undefined;
@@ -221,8 +200,6 @@ export class ReplyService {
         nextPage,
         nextUrl,
       };
-
-      await this.redisCacheService.set(cacheKey, data, 60);
 
       return data;
     } catch (error) {

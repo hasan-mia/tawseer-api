@@ -1,6 +1,4 @@
-/* eslint-disable prettier/prettier */
 import { CloudinaryService } from '@/cloudinary/cloudinary.service';
-import { RedisCacheService } from '@/rediscloud.service';
 import { CommentSchema } from '@/schemas/comment.schema';
 import { PostSchema } from '@/schemas/post.schema';
 import { ReplySchema } from '@/schemas/reply.schema';
@@ -20,7 +18,7 @@ import { ReplyService } from './reply.service';
     ]),
   ],
   controllers: [ReplyController],
-  providers: [ReplyService, CloudinaryService, RedisCacheService],
+  providers: [ReplyService, CloudinaryService],
   exports: [ReplyService],
 })
 export class ReplyModule { }

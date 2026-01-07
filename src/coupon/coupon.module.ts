@@ -1,6 +1,5 @@
 /* eslint-disable prettier/prettier */
 import { CloudinaryService } from '@/cloudinary/cloudinary.service';
-import { RedisCacheService } from '@/rediscloud.service';
 import { CouponSchema } from '@/schemas/coupon.schema';
 import { ServiceSchema } from '@/schemas/service.schema';
 import { VendorSchema } from '@/schemas/vendor.schema';
@@ -20,7 +19,7 @@ import { CouponService } from './coupon.service';
     ]),
   ],
   controllers: [CouponController],
-  providers: [CouponService, CloudinaryService, RedisCacheService],
+  providers: [CouponService, CloudinaryService],
   exports: [CouponService],
 })
 export class CouponModule { }
