@@ -19,7 +19,7 @@ export class Category extends Document {
 
 export const CategorySchema = SchemaFactory.createForClass(Category);
 
-CategorySchema.pre<Category>('save', async function (next) {
+CategorySchema.pre<Category>('save', async function () {
   if (this.isModified('name') || this.isNew) {
     let baseSlug = slugify(this.name, { lower: true, strict: true });
     let slug = baseSlug;
@@ -37,6 +37,4 @@ CategorySchema.pre<Category>('save', async function (next) {
 
     this.slug = slug;
   }
-
-  next();
 });

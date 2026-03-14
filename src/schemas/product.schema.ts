@@ -28,7 +28,7 @@ export class Product extends Document {
 
 export const ProductSchema = SchemaFactory.createForClass(Product);
 
-ProductSchema.pre<Product>('save', async function (next) {
+ProductSchema.pre<Product>('save', async function () {
   if (this.isModified('name') || this.isNew) {
     let baseSlug = slugify(this.name, { lower: true, strict: true });
     let slug = baseSlug;
@@ -46,6 +46,4 @@ ProductSchema.pre<Product>('save', async function (next) {
 
     this.slug = slug;
   }
-
-  next();
 });

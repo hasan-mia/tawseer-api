@@ -1,13 +1,10 @@
-/* eslint-disable prettier/prettier */
-import * as ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import { Injectable } from '@nestjs/common';
 import { UploadApiErrorResponse, UploadApiResponse, v2 } from 'cloudinary';
-import ffmpeg from 'fluent-ffmpeg';
+import ffmpegPath from 'ffmpeg-static';
+import { spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as streamifier from 'streamifier';
-
-ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
 @Injectable()
 export class CloudinaryService {
@@ -60,62 +57,83 @@ export class CloudinaryService {
     });
   }
 
-  async convertAndUploadVideo(file: Express.Multer.File): Promise<UploadApiResponse | UploadApiErrorResponse> {
+  async convertAndUploadVideo(
+    file: Express.Multer.File,
+  ): Promise<UploadApiResponse | UploadApiErrorResponse> {
     return new Promise((resolve, reject) => {
-      const outputPath = path.join(__dirname, '..', 'public', 'upload', 'video');
-      if (!fs.existsSync(outputPath)) {
-        fs.mkdirSync(outputPath, { recursive: true });
+      const baseDir = path.join(__dirname, '..', 'public', 'upload', 'video');
+
+      if (!fs.existsSync(baseDir)) {
+        fs.mkdirSync(baseDir, { recursive: true });
       }
 
-      const filePath = path.join(outputPath, file.originalname);
       const date = new Date();
       const name = date.toISOString().replace(/[:.-]/g, '');
-      const outputDir = path.join(outputPath, name);
-      const outputName = `${name}.m3u8`;
 
-      fs.writeFileSync(filePath, file.buffer);
+      const inputPath = path.join(baseDir, `${name}.mp4`);
+      const outputDir = path.join(baseDir, name);
+      const outputName = `${name}.m3u8`;
+      const outputPath = path.join(outputDir, outputName);
+
+      fs.writeFileSync(inputPath, file.buffer);
+
       if (!fs.existsSync(outputDir)) {
         fs.mkdirSync(outputDir);
       }
 
-      ffmpeg(filePath)
-        .videoCodec('libx264')
-        .audioCodec('aac')
-        .outputOptions([
-          '-preset slow',
-          '-crf 28',
-          '-b:a 128k',
-          '-hls_segment_type fmp4',
-          '-hls_time 10',
-          '-hls_list_size 0',
-        ])
-        .output(path.join(outputDir, outputName))
-        .on('end', async () => {
-          fs.unlinkSync(filePath);
-          fs.rmdirSync(outputPath, { recursive: true });
-          try {
-            const convertedFilePath = path.join(outputDir, outputName);
-            console.log('Conversion complete!', convertedFilePath);
+      const args = [
+        '-i',
+        inputPath,
+        '-codec:v',
+        'libx264',
+        '-codec:a',
+        'aac',
+        '-preset',
+        'slow',
+        '-crf',
+        '28',
+        '-b:a',
+        '128k',
+        '-hls_segment_type',
+        'fmp4',
+        '-hls_time',
+        '10',
+        '-hls_list_size',
+        '0',
+        outputPath,
+      ];
 
-            const uploadStream = v2.uploader.upload_stream((error, result) => {
-              if (error) {
-                reject(error);
-              } else {
-                resolve(result);
-              }
-            });
+      const ffmpeg = spawn(ffmpegPath as string, args);
 
-            fs.createReadStream(convertedFilePath).pipe(uploadStream);
-          } catch (error) {
-            console.error(error);
-            reject(error);
-          }
-        })
-        .on('error', (err) => {
-          console.error(err);
+      ffmpeg.stderr.on('data', (data) => {
+        console.log(`FFmpeg: ${data}`);
+      });
+
+      ffmpeg.on('close', async (code) => {
+        if (code !== 0) {
+          return reject(new Error(`FFmpeg failed with code ${code}`));
+        }
+
+        try {
+          console.log('Conversion complete:', outputPath);
+
+          const uploadStream = v2.uploader.upload_stream(
+            { resource_type: 'video' },
+            (error, result) => {
+              if (error) reject(error);
+              else resolve(result);
+            },
+          );
+
+          fs.createReadStream(outputPath).pipe(uploadStream);
+        } catch (err) {
           reject(err);
-        })
-        .run();
+        } finally {
+          fs.rmSync(baseDir, { recursive: true, force: true });
+        }
+      });
+
+      ffmpeg.on('error', reject);
     });
   }
 

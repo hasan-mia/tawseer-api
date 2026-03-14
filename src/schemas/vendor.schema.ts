@@ -110,7 +110,7 @@ export class Vendor extends Document {
 
 export const VendorSchema = SchemaFactory.createForClass(Vendor);
 
-VendorSchema.pre<Vendor>('save', async function (next) {
+VendorSchema.pre<Vendor>('save', async function () {
     if (this.isModified('name') || this.isNew) {
         let baseSlug = slugify(this.name, { lower: true, strict: true });
         let slug = baseSlug;
@@ -128,8 +128,6 @@ VendorSchema.pre<Vendor>('save', async function (next) {
 
         this.slug = slug;
     }
-
-    next();
 });
 
 VendorSchema.index({ user: 1 });

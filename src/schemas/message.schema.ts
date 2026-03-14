@@ -32,6 +32,9 @@ export class Message extends Document {
 
     @Prop({ type: Boolean, default: false })
     is_deleted: boolean;
+
+    @Prop({ unique: true })
+    messageHash: string;
 }
 
 

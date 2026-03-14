@@ -40,7 +40,7 @@ export class Address extends Document {
 
 export const AddressSchema = SchemaFactory.createForClass(Address);
 
-AddressSchema.pre<Address>('save', async function (next) {
+AddressSchema.pre<Address>('save', async function () {
   if (this.is_default) {
     const model = this.constructor as Model<Address>;
     await model.updateMany(
@@ -48,5 +48,4 @@ AddressSchema.pre<Address>('save', async function (next) {
       { $set: { is_default: false } }
     );
   }
-  next();
 });

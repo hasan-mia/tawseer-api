@@ -17,7 +17,6 @@ export class NotificationService {
   ) {
     this.expo = new Expo({
       accessToken: process.env.EXPO_ACCESS_TOKEN,
-      useFcmV1: true,
     });
   }
 

@@ -43,17 +43,23 @@ export class AppointmentService {
       const service = await this.serviceModel.findById(serviceId).exec();
       if (!service) throw new NotFoundException('Service not found');
 
+      const { user: _, ...appointmentData } = data;
+
       const saveData = {
-        user: userId,
-        service: serviceId,
-        vendor: service.vendor,
+        user: new Types.ObjectId(userId),
+        service: new Types.ObjectId(serviceId),
+        vendor: service.vendor instanceof Types.ObjectId ? service.vendor : new Types.ObjectId(service.vendor),
         status: 'pending',
         payment_status: 'pending',
         price: service.price,
-        ...data,
+        ...appointmentData,
       };
 
-      const appointment = await this.appointmentModel.create(saveData);
+      const appointment = await this.appointmentModel.create(saveData) as Appointment;
+
+      if (!appointment) {
+        throw new InternalServerErrorException('Failed to create appointment');
+      }
 
       let payment: {
         clientSecret: string;
